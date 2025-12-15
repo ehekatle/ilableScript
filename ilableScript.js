@@ -1,7 +1,7 @@
 // == iLabel直播质检单检测核心库 ==
 // 版本: 1.5
-// 远程库地址: https://tes.com/ilable.js
-// 最后更新: 2024-01-01
+// 远程库地址: https://github.com/ehekatle/ilableScript/blob/main/ilableScript.js
+// 最后更新: 2025-12-15
 
 (function(global) {
     'use strict';
@@ -880,3 +880,4 @@
     
 
 })(window);
+
