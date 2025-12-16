@@ -434,8 +434,11 @@ function showPopup(liveInfo, reviewer, checkResult) {
     
     // 检查开关状态
     const reminderEnabled = window.getReminderStatus ? window.getReminderStatus() : true;
+    
+    // 开关关闭时，只有普通单不显示弹窗；其他检查类型都要显示
     if (!reminderEnabled && checkResult.type === 'normal') {
-        return; // 开关关闭时不显示普通单弹窗
+        console.log('提醒开关已关闭，普通单不显示弹窗');
+        return;
     }
     
     // 创建遮罩
@@ -553,22 +556,9 @@ function showPopup(liveInfo, reviewer, checkResult) {
             }
         }, 60000); // 1分钟后
     }
-}
-
-// 移除弹窗
-function removePopup() {
-    const popup = document.querySelector('.ilabel-popup');
-    const overlay = document.querySelector('.ilabel-overlay');
     
-    if (popup) popup.remove();
-    if (overlay) overlay.remove();
-    
-    if (popupTimer) {
-        clearTimeout(popupTimer);
-        popupTimer = null;
-    }
-    
-    popupStartTime = null;
+    // 记录日志
+    console.log('弹窗已显示，类型:', checkResult.type, '开关状态:', reminderEnabled ? '开启' : '关闭');
 }
 
 // ==================== 请求拦截部分 ====================
@@ -680,3 +670,4 @@ if (document.readyState === 'loading') {
 
 // 导出配置（可选）
 window.ILABEL_CONFIG = CONFIG;
+
