@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助工具
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  直播审核辅助工具，显示审核状态提醒
-// @author       caloneis
+// @version      2.1
+// @description  预埋、豁免、直播信息违规、超时提示功能，最终版
+// @author       ehekatle
 // @match        https://ilabel.weixin.qq.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=weixin.qq.com
 // @grant        GM_xmlhttpRequest
@@ -14,7 +14,7 @@
     'use strict';
     
     // 远程库URL
-    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/main/ilableScript.js';
+    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/raw/refs/heads/test/ilableScript.js';
     
     // ==================== 推送功能（使用GM_xmlhttpRequest） ====================
     
