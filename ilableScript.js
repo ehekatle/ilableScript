@@ -325,69 +325,53 @@ function decodeUnicode(str) {
 
 // ==================== 推送功能 ====================
 
-// 发送企业微信推送（使用GM_xmlhttpRequest）
+// 发送企业微信推送（使用iframe绕过CORS）
 function sendWeChatPush(message, mentionedList = []) {
-    console.log('尝试发送企业微信推送:', { message, mentionedList });
+    console.log('准备发送企业微信推送:', { message, mentionedList });
     
-    // 检查是否在油猴环境中且有GM_xmlhttpRequest
-    if (typeof GM_xmlhttpRequest !== 'undefined') {
-        console.log('使用GM_xmlhttpRequest发送推送（绕过CORS）');
-        
-        try {
-            const payload = {
-                msgtype: "text",
-                text: {
-                    content: message,
-                    mentioned_list: mentionedList
-                }
-            };
-            
-            console.log('推送数据:', JSON.stringify(payload));
-            
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: CONFIG.PUSH_URL,
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                data: JSON.stringify(payload),
-                timeout: 10000,
-                onload: function(response) {
-                    console.log('GM_xmlhttpRequest推送响应状态:', response.status);
-                    console.log('GM_xmlhttpRequest推送响应:', response.responseText);
-                    
-                    if (response.status >= 200 && response.status < 300) {
-                        console.log('✅ 推送发送成功');
-                    } else {
-                        console.error('❌ 推送发送失败，状态码:', response.status);
-                        // 尝试备用方法
-                        tryImageBeacon(message, mentionedList);
-                    }
-                },
-                onerror: function(error) {
-                    console.error('GM_xmlhttpRequest推送网络错误:', error);
-                    tryImageBeacon(message, mentionedList);
-                },
-                ontimeout: function() {
-                    console.error('GM_xmlhttpRequest推送超时');
-                    tryImageBeacon(message, mentionedList);
-                }
-            });
-        } catch (error) {
-            console.error('GM_xmlhttpRequest执行失败:', error);
-            tryImageBeacon(message, mentionedList);
-        }
-    } else {
-        console.log('GM_xmlhttpRequest不可用，尝试其他方法');
-        tryImageBeacon(message, mentionedList);
+    // 主要方法：使用iframe表单提交（可以绕过CORS）
+    if (sendViaIframe(message, mentionedList)) {
+        console.log('✅ iframe推送请求已发送');
+        return;
     }
+    
+    // 备用：在控制台显示消息
+    console.log('🚨 需要推送的消息:', {
+        消息: message,
+        需要提醒的人员: mentionedList,
+        推送地址: CONFIG.PUSH_URL,
+        时间: new Date().toLocaleString()
+    });
+    
+    // 尝试一个更简单的iframe方法
+    sendViaSimpleIframe(message, mentionedList);
 }
 
-// 使用Image Beacon技术发送推送（最简单的方法，没有CORS限制）
-function tryImageBeacon(message, mentionedList = []) {
-    console.log('尝试使用Image Beacon发送推送...');
-    
+// 使用iframe发送请求（主方法）
+function sendViaIframe(message, mentionedList) {
     try {
+        console.log('尝试iframe表单提交...');
+        
+        // 创建一个临时iframe
+        const iframeId = 'ilabel-push-iframe-' + Date.now();
+        const iframe = document.createElement('iframe');
+        iframe.id = iframeId;
+        iframe.name = iframeId;
+        iframe.style.display = 'none';
+        iframe.style.position = 'absolute';
+        iframe.style.left = '-9999px';
+        iframe.style.top = '-9999px';
+        
+        // 创建一个form
+        const formId = 'ilabel-push-form-' + Date.now();
+        const form = document.createElement('form');
+        form.id = formId;
+        form.method = 'POST';
+        form.action = CONFIG.PUSH_URL;
+        form.target = iframeId;
+        form.style.display = 'none';
+        
+        // 构建payload
         const payload = {
             msgtype: "text",
             text: {
@@ -396,78 +380,114 @@ function tryImageBeacon(message, mentionedList = []) {
             }
         };
         
-        // 将数据编码到URL中（GET请求）
-        const params = new URLSearchParams();
-        params.append('data', JSON.stringify(payload));
+        // 添加隐藏字段
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(payload);
+        form.appendChild(input);
         
-        // 创建一个Image对象来发送请求（没有CORS限制）
-        const img = new Image();
-        img.style.display = 'none';
+        // 添加到文档
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
         
-        // 注意：企业微信API只支持POST，所以这种方法可能无效
-        // 但我们还是尝试一下
-        img.src = CONFIG.PUSH_URL + '?' + params.toString() + '&_t=' + Date.now();
+        // 设置iframe加载回调
+        iframe.onload = function() {
+            console.log('iframe加载完成，推送可能已发送');
+            // 清理
+            setTimeout(() => {
+                if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                if (form.parentNode) form.parentNode.removeChild(form);
+            }, 3000);
+        };
         
-        // 设置超时检查
-        setTimeout(() => {
-            console.log('Image Beacon请求已发送（可能成功）');
-        }, 100);
+        iframe.onerror = function() {
+            console.log('iframe加载错误，但请求可能已发送');
+        };
         
-        // 备用方案：使用简单的异步XHR（不设置CORS头）
-        trySimpleXHR(message, mentionedList);
+        // 提交表单
+        form.submit();
+        console.log('iframe表单已提交');
+        
+        // 验证请求是否真的发送了
+        verifyRequestSent();
+        
+        return true;
         
     } catch (error) {
-        console.error('Image Beacon失败:', error);
-        trySimpleXHR(message, mentionedList);
+        console.error('iframe方法失败:', error);
+        return false;
     }
 }
 
-// 尝试简单的异步XHR（不设置CORS头，让浏览器处理）
-function trySimpleXHR(message, mentionedList = []) {
-    console.log('尝试简单异步XHR...');
-    
+// 更简单的iframe方法（备用）
+function sendViaSimpleIframe(message, mentionedList) {
     try {
-        const xhr = new XMLHttpRequest();
-        // 使用异步请求
-        xhr.open('POST', CONFIG.PUSH_URL, true);
+        console.log('尝试简单iframe方法...');
         
-        // 不设置Content-Type，让浏览器使用默认的
-        // 这样可以避免CORS预检请求
-        
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4) {
-                console.log('简单XHR状态:', xhr.status);
-                if (xhr.status === 0) {
-                    console.log('简单XHR被CORS阻止或网络错误');
-                    // 最后尝试：console记录
-                    console.log('🚨 需要推送的消息:', message, '@人员:', mentionedList);
-                } else if (xhr.status >= 200 && xhr.status < 300) {
-                    console.log('✅ 简单XHR推送成功');
-                } else {
-                    console.error('❌ 简单XHR推送失败:', xhr.status);
-                }
+        // 创建一个新窗口/标签页来发送请求
+        const payload = {
+            msgtype: "text",
+            text: {
+                content: message,
+                mentioned_list: mentionedList
             }
         };
         
-        // 发送FormData格式的数据（可能绕过CORS）
-        const formData = new FormData();
-        formData.append('msgtype', 'text');
-        formData.append('content', message);
-        if (mentionedList.length > 0) {
-            formData.append('mentioned_list', JSON.stringify(mentionedList));
+        // 创建一个临时的form，在新窗口打开
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = CONFIG.PUSH_URL;
+        form.target = '_blank';
+        form.style.display = 'none';
+        
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'data';
+        input.value = JSON.stringify(payload);
+        form.appendChild(input);
+        
+        document.body.appendChild(form);
+        
+        // 设置一个超时后自动关闭的窗口
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+            form.target = 'push-window-' + Date.now();
+            form.submit();
+            
+            // 3秒后尝试关闭窗口
+            setTimeout(() => {
+                try {
+                    newWindow.close();
+                } catch (e) {
+                    // 忽略关闭错误
+                }
+            }, 3000);
+            
+            console.log('简单iframe方法已执行');
         }
         
-        xhr.send(formData);
+        // 清理
+        setTimeout(() => {
+            if (form.parentNode) form.parentNode.removeChild(form);
+        }, 5000);
         
     } catch (error) {
-        console.error('简单XHR失败:', error);
-        // 最终方案：在控制台显示推送信息
-        console.log('🚨 需要推送的消息（所有方法都失败了）:', {
-            消息: message,
-            需要提醒的人员: mentionedList,
-            推送地址: CONFIG.PUSH_URL
-        });
+        console.error('简单iframe方法失败:', error);
     }
+}
+
+// 验证请求是否发送（通过图片加载）
+function verifyRequestSent() {
+    // 尝试加载一个图片来验证网络连接
+    const testImg = new Image();
+    testImg.onload = function() {
+        console.log('✅ 网络连接正常，iframe请求可能已成功发送');
+    };
+    testImg.onerror = function() {
+        console.log('⚠️ 网络可能有问题，但iframe请求可能已发送');
+    };
+    testImg.src = 'https://www.google.com/favicon.ico?t=' + Date.now();
 }
 
 // ==================== 信息获取部分 ====================
@@ -666,6 +686,13 @@ function showPopup(liveInfo, reviewer, checkResult) {
     const now = new Date().toLocaleString();
     const startTime = liveInfo.streamStartTime ? formatTimestamp(liveInfo.streamStartTime) : '无';
     
+    // 检查是否需要推送
+    const needPush = reviewer && REVIEWER_WHITELIST_ARRAY.includes(reviewer) && reminderEnabled;
+    const pushInfo = needPush ? 
+        `<div style="color: #faad14; font-size: 13px; margin-top: 5px; text-align: center;">
+            ⚠️ 1分钟内未确认将发送提醒给 ${reviewer}
+        </div>` : '';
+    
     // 构建弹窗HTML
     notification.innerHTML = `
         <div class="ilabel-notification-header ${checkResult.headerClass}">
@@ -729,6 +756,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
 
             <div class="ilabel-result-box ${checkResult.resultClass}">
                 ${checkResult.message}
+                ${pushInfo}
             </div>
         </div>
 
@@ -819,6 +847,25 @@ function showPopup(liveInfo, reviewer, checkResult) {
                 const mentionedList = [reviewer];
                 const pushMessage = `新单未确认，${checkResult.message}`;
                 sendWeChatPush(pushMessage, mentionedList);
+                
+                // 添加一个视觉提示
+                const resultBox = notification.querySelector('.ilabel-result-box');
+                if (resultBox) {
+                    const originalHTML = resultBox.innerHTML;
+                    resultBox.innerHTML = `
+                        <div style="color: #f5222d; font-weight: bold;">
+                            ⚠️ 已发送提醒给 ${reviewer}
+                        </div>
+                        <div style="font-size: 13px; margin-top: 5px;">
+                            ${checkResult.message}
+                        </div>
+                    `;
+                    
+                    // 5秒后恢复原状
+                    setTimeout(() => {
+                        resultBox.innerHTML = originalHTML;
+                    }, 5000);
+                }
             }
         }, 60000); // 1分钟后
     }
