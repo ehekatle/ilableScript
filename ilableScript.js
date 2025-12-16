@@ -1,22 +1,13 @@
 // ==================== 配置部分 ====================
-// 主播白名单（空格分隔）
 const CONFIG = {
   ANCHOR_WHITELIST: "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博器",
-  
-  // 处罚检查关键词（空格分隔）
   PUNISHMENT_KEYWORDS: "金包 金重量 金含量 金镯子 金项链 金子这么便宜 缅 曼德勒 越南",
-  
-  // 审核白名单（空格分隔）
   REVIEWER_WHITELIST: "王鹏程 刘丹娜 蒋娜娜 刘维青 李晓露 何浩 卢洪",
-  
-  // 审核黑名单（空格分隔）
   REVIEWER_BLACKLIST: "杨松江",
-  
-  // 推送地址
   PUSH_URL: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=90014c35-804f-489e-b203-bf59f46f69fb"
 };
 
-// 将配置转换为数组
+// 转换为数组
 const ANCHOR_WHITELIST_ARRAY = CONFIG.ANCHOR_WHITELIST.split(' ').filter(item => item.trim());
 const PUNISHMENT_KEYWORDS_ARRAY = CONFIG.PUNISHMENT_KEYWORDS.split(' ').filter(item => item.trim());
 const REVIEWER_WHITELIST_ARRAY = CONFIG.REVIEWER_WHITELIST.split(' ').filter(item => item.trim());
@@ -27,9 +18,11 @@ console.log('iLabel远程脚本开始执行');
 // ==================== 全局变量 ====================
 let popupTimer = null;
 let isInitialized = false;
+let reminderEnabled = true; // 默认开启提醒
 
 // ==================== 样式定义 ====================
 const STYLES = `
+    /* 主样式 */
     .ilabel-custom-notification {
         position: fixed;
         top: 50%;
@@ -47,16 +40,11 @@ const STYLES = `
     }
     
     @keyframes popupFadeIn {
-        from {
-            opacity: 0;
-            transform: translate(-50%, -60%);
-        }
-        to {
-            opacity: 1;
-            transform: translate(-50%, -50%);
-        }
+        from { opacity: 0; transform: translate(-50%, -60%); }
+        to { opacity: 1; transform: translate(-50%, -50%); }
     }
     
+    /* 弹窗头部 */
     .ilabel-notification-header {
         padding: 16px 20px;
         font-weight: bold;
@@ -68,21 +56,10 @@ const STYLES = `
         border-bottom: 2px solid rgba(255,255,255,0.2);
     }
     
-    .ilabel-header-normal {
-        background: #1890ff;
-    }
-    
-    .ilabel-header-green {
-        background: #52c41a;
-    }
-    
-    .ilabel-header-yellow {
-        background: #faad14;
-    }
-    
-    .ilabel-header-red {
-        background: #f5222d;
-    }
+    .ilabel-header-normal { background: #1890ff; }
+    .ilabel-header-green { background: #52c41a; }
+    .ilabel-header-yellow { background: #faad14; }
+    .ilabel-header-red { background: #f5222d; }
     
     .ilabel-notification-close {
         background: none;
@@ -100,10 +77,9 @@ const STYLES = `
         transition: background 0.2s;
     }
     
-    .ilabel-notification-close:hover {
-        background: rgba(255,255,255,0.2);
-    }
+    .ilabel-notification-close:hover { background: rgba(255,255,255,0.2); }
     
+    /* 弹窗内容 */
     .ilabel-notification-content {
         padding: 20px;
         max-height: 500px;
@@ -145,18 +121,11 @@ const STYLES = `
         line-height: 20px;
     }
     
-    .ilabel-copy-btn:hover {
-        background: #40a9ff;
-    }
+    .ilabel-copy-btn:hover { background: #40a9ff; }
+    .ilabel-copy-btn:active { background: #096dd9; }
+    .ilabel-copied { background: #52c41a !important; }
     
-    .ilabel-copy-btn:active {
-        background: #096dd9;
-    }
-    
-    .ilabel-copied {
-        background: #52c41a !important;
-    }
-    
+    /* 结果框 */
     .ilabel-result-box {
         margin-top: 20px;
         padding: 15px;
@@ -191,6 +160,7 @@ const STYLES = `
         border-color: #ffa39e;
     }
     
+    /* 弹窗底部 */
     .ilabel-notification-footer {
         padding: 15px 20px;
         border-top: 1px solid #f0f0f0;
@@ -211,10 +181,9 @@ const STYLES = `
         font-weight: bold;
     }
     
-    .ilabel-confirm-btn:hover {
-        background: #40a9ff;
-    }
+    .ilabel-confirm-btn:hover { background: #40a9ff; }
     
+    /* 遮罩层 */
     .ilabel-overlay {
         position: fixed;
         top: 0;
@@ -238,8 +207,70 @@ const STYLES = `
         max-width: 300px;
     }
     
-    .ilabel-liveid-value:hover {
-        background-color: #e8e8e8;
+    .ilabel-liveid-value:hover { background-color: #e8e8e8; }
+    
+    /* 开关样式 */
+    .ilabel-switch-container {
+        position: fixed;
+        bottom: 0px;
+        left: 60px;
+        z-index: 999999;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        min-width: auto;
+    }
+    
+    .ilabel-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+    }
+    
+    .ilabel-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .ilabel-switch-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 20px;
+    }
+    
+    .ilabel-switch-slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .ilabel-switch-slider {
+        background-color: #07c160;
+    }
+    
+    input:checked + .ilabel-switch-slider:before {
+        transform: translateX(20px);
+    }
+    
+    .ilabel-switch-container:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.25);
     }
 `;
 
@@ -318,84 +349,14 @@ function decodeUnicode(str) {
 
 // ==================== 推送功能 ====================
 
-// 发送企业微信推送（使用form+iframe绕过CORS限制）
+// 发送企业微信推送（通过调用用户脚本的推送函数）
 function sendWeChatPush(message, mentionedList = []) {
-    console.log('准备发送企业微信推送:', { message, mentionedList });
-    
-    // 如果提到了人员，在消息内容中@他们
-    let finalMessage = message;
-    if (mentionedList.length > 0) {
-        finalMessage = message + mentionedList.map(name => ` @${name}`).join('');
-    }
-    
-    // 企业微信webhook的正确格式
-    const payload = {
-        msgtype: "text",
-        text: {
-            content: finalMessage
-        }
-    };
-    
-    console.log('推送数据:', JSON.stringify(payload));
-    
-    // 方法1：使用form+iframe绕过CORS
-    try {
-        // 创建隐藏的iframe
-        const iframeId = 'wechat-push-iframe-' + Date.now();
-        const iframe = document.createElement('iframe');
-        iframe.name = iframeId;
-        iframe.style.display = 'none';
-        iframe.style.position = 'absolute';
-        iframe.style.left = '-9999px';
-        iframe.style.width = '1px';
-        iframe.style.height = '1px';
-        iframe.style.border = 'none';
-        
-        // 创建form
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = CONFIG.PUSH_URL;
-        form.target = iframeId;
-        form.style.display = 'none';
-        form.enctype = 'application/json';
-        
-        // 创建隐藏input来传递JSON数据
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'data';
-        input.value = JSON.stringify(payload);
-        form.appendChild(input);
-        
-        // 添加到body
-        document.body.appendChild(iframe);
-        document.body.appendChild(form);
-        
-        // 提交表单
-        console.log('提交企业微信推送:', CONFIG.PUSH_URL);
-        form.submit();
-        
-        console.log('已通过form+iframe方式提交推送请求');
-        
-        // 清理
-        setTimeout(() => {
-            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-            if (form.parentNode) form.parentNode.removeChild(form);
-        }, 5000);
-        
-        // 方法2：备用方案 - 直接使用GET请求
-        setTimeout(() => {
-            try {
-                const content = encodeURIComponent(finalMessage);
-                const img = new Image();
-                img.src = `${CONFIG.PUSH_URL}&msgtype=text&content=${content}&_t=${Date.now()}`;
-                console.log('已尝试备用GET方案');
-            } catch (e) {
-                console.error('备用方案失败:', e);
-            }
-        }, 100);
-        
-    } catch (error) {
-        console.error('推送失败:', error);
+    console.log('远程库调用推送:', message, mentionedList);
+    // 调用用户脚本的推送函数
+    if (window._ilabelSendPush) {
+        window._ilabelSendPush(message, mentionedList);
+    } else {
+        console.error('推送函数未初始化');
     }
 }
 
@@ -535,14 +496,73 @@ function checkInfo(liveInfo, reviewer) {
     };
 }
 
+// ==================== 开关功能 ====================
+
+// 创建开关按钮
+function createSwitchButton() {
+    const container = document.createElement('div');
+    container.className = 'ilabel-switch-container';
+    container.title = reminderEnabled ? '提醒已开启' : '提醒已关闭';
+    
+    const switchContainer = document.createElement('label');
+    switchContainer.className = 'ilabel-switch';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = reminderEnabled;
+    
+    const slider = document.createElement('span');
+    slider.className = 'ilabel-switch-slider';
+    
+    // 保存状态变化
+    checkbox.addEventListener('change', function() {
+        reminderEnabled = this.checked;
+        container.title = this.checked ? '提醒已开启' : '提醒已关闭';
+        
+        // 保存到localStorage
+        try {
+            localStorage.setItem('ilabel_reminder_enabled', this.checked.toString());
+        } catch (e) {
+            console.error('保存开关状态失败:', e);
+        }
+    });
+    
+    switchContainer.appendChild(checkbox);
+    switchContainer.appendChild(slider);
+    container.appendChild(switchContainer);
+    
+    return container;
+}
+
+// 添加开关按钮到页面
+function addSwitchButton() {
+    const switchBtn = createSwitchButton();
+    document.body.appendChild(switchBtn);
+    console.log('开关按钮已添加到页面');
+}
+
+// 从localStorage加载开关状态
+function loadReminderStatus() {
+    try {
+        const saved = localStorage.getItem('ilabel_reminder_enabled');
+        if (saved !== null) {
+            reminderEnabled = saved === 'true';
+        }
+    } catch (e) {
+        console.error('加载开关状态失败:', e);
+    }
+}
+
+// 暴露获取开关状态的方法
+function getReminderStatus() {
+    return reminderEnabled;
+}
+
 // ==================== 弹窗显示部分 ====================
 
 function showPopup(liveInfo, reviewer, checkResult) {
     // 移除现有弹窗
     removePopup();
-    
-    // 检查开关状态
-    const reminderEnabled = window.getReminderStatus ? window.getReminderStatus() : true;
     
     // 开关关闭时，只有普通单不显示弹窗
     if (!reminderEnabled && checkResult.type === 'normal') {
@@ -560,7 +580,6 @@ function showPopup(liveInfo, reviewer, checkResult) {
     notification.onclick = (e) => e.stopPropagation();
     
     // 格式化时间
-    const now = new Date().toLocaleString();
     const startTime = liveInfo.streamStartTime ? formatTimestamp(liveInfo.streamStartTime) : '无';
     
     // 检查是否需要推送
@@ -655,7 +674,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
     // 标记是否已推送过（确保每个弹窗只推送一次）
     notification._hasPushed = false;
     
-    // 设置推送定时器（从60秒改为20秒）
+    // 设置推送定时器（20秒）
     if (needPush) {
         popupTimer = setTimeout(() => {
             if (document.body.contains(notification) && !notification._hasPushed) {
@@ -663,7 +682,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
                 notification._hasPushed = true;
                 
                 const pushMessage = `新单未确认，${checkResult.message} @${reviewer}`;
-                sendWeChatPush(pushMessage);
+                sendWeChatPush(pushMessage, [reviewer]);
                 
                 // 添加视觉提示
                 const resultBox = notification.querySelector('.ilabel-result-box');
@@ -678,7 +697,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
                     resultBox.innerHTML = originalHTML;
                 }, 5000);
             }
-        }, 20000); // 从60000改为20000（20秒）
+        }, 20000);
     }
 }
 
@@ -762,23 +781,34 @@ function init() {
     // 添加样式
     addStyles();
     
+    // 加载开关状态
+    loadReminderStatus();
+    
     // 绑定XMLHttpRequest拦截器
     bindXHRInterceptor();
+    
+    // 添加开关按钮（等待DOM加载）
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            addSwitchButton();
+        });
+    } else {
+        addSwitchButton();
+    }
     
     isInitialized = true;
     console.log('iLabel远程脚本初始化完成');
 }
 
-// 立即初始化
-(function() {
-    console.log('==================== iLabel远程脚本加载 ====================');
-    
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-    
-    // 导出配置
-    window.ILABEL_CONFIG = CONFIG;
-})();
+// ==================== 立即执行 ====================
+
+// 等待页面基本就绪
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    setTimeout(init, 100);
+}
+
+// 导出配置和方法
+window.ILABEL_CONFIG = CONFIG;
+window.getReminderStatus = getReminderStatus;
