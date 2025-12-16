@@ -323,93 +323,106 @@ function decodeUnicode(str) {
     });
 }
 
+// ==================== 推送功能 ====================
+
 // 发送企业微信推送（使用GM_xmlhttpRequest）
 function sendWeChatPush(message, mentionedList = []) {
     console.log('尝试发送企业微信推送:', { message, mentionedList });
     
-    // 检查是否在油猴环境中
+    // 检查是否在油猴环境中且有GM_xmlhttpRequest
     if (typeof GM_xmlhttpRequest !== 'undefined') {
-        console.log('使用GM_xmlhttpRequest发送推送');
+        console.log('使用GM_xmlhttpRequest发送推送（绕过CORS）');
         
         try {
+            const payload = {
+                msgtype: "text",
+                text: {
+                    content: message,
+                    mentioned_list: mentionedList
+                }
+            };
+            
+            console.log('推送数据:', JSON.stringify(payload));
+            
             GM_xmlhttpRequest({
                 method: 'POST',
                 url: CONFIG.PUSH_URL,
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
-                data: JSON.stringify({
-                    msgtype: "text",
-                    text: {
-                        content: message,
-                        mentioned_list: mentionedList
-                    }
-                }),
-                timeout: 10000,
+                data: JSON.stringify(payload),
+                responseType: 'json',
+                timeout: 15000,
                 onload: function(response) {
-                    console.log('推送响应状态:', response.status);
-                    if (response.status === 200) {
-                        console.log('推送发送成功');
-                        try {
-                            const data = JSON.parse(response.responseText);
-                            console.log('推送响应数据:', data);
-                        } catch (e) {
-                            console.log('推送响应:', response.responseText);
-                        }
+                    console.log('GM_xmlhttpRequest推送响应状态:', response.status);
+                    console.log('GM_xmlhttpRequest推送响应:', response.responseText);
+                    
+                    if (response.status >= 200 && response.status < 300) {
+                        console.log('✅ 推送发送成功');
                     } else {
-                        console.error('推送发送失败，状态码:', response.status, '响应:', response.responseText);
-                        // 尝试备用方法
-                        sendWeChatPushFallback(message, mentionedList);
+                        console.error('❌ 推送发送失败，状态码:', response.status);
+                        // 尝试直接使用XMLHttpRequest（不带CORS头）
+                        tryDirectXHR(message, mentionedList);
                     }
                 },
                 onerror: function(error) {
-                    console.error('推送发送失败，网络错误:', error);
-                    // 尝试备用方法
-                    sendWeChatPushFallback(message, mentionedList);
+                    console.error('GM_xmlhttpRequest推送网络错误:', error);
+                    tryDirectXHR(message, mentionedList);
                 },
                 ontimeout: function() {
-                    console.error('推送发送超时');
-                    sendWeChatPushFallback(message, mentionedList);
+                    console.error('GM_xmlhttpRequest推送超时');
+                    tryDirectXHR(message, mentionedList);
+                },
+                onabort: function() {
+                    console.error('GM_xmlhttpRequest推送被中止');
+                    tryDirectXHR(message, mentionedList);
                 }
             });
         } catch (error) {
-            console.error('GM_xmlhttpRequest失败:', error);
-            sendWeChatPushFallback(message, mentionedList);
+            console.error('GM_xmlhttpRequest执行失败:', error);
+            tryDirectXHR(message, mentionedList);
         }
     } else {
-        console.log('不在油猴环境中，使用备用方法');
-        sendWeChatPushFallback(message, mentionedList);
+        console.log('GM_xmlhttpRequest不可用，尝试其他方法');
+        tryDirectXHR(message, mentionedList);
     }
 }
 
-// 备用推送方法
-function sendWeChatPushFallback(message, mentionedList = []) {
-    console.log('使用备用推送方法');
+// 尝试直接XMLHttpRequest（可能被CORS阻止）
+function tryDirectXHR(message, mentionedList) {
+    console.log('尝试直接XMLHttpRequest...');
     
     try {
-        // 尝试使用原生XMLHttpRequest
+        // 创建一个简单的请求，不设置CORS相关头部
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', CONFIG.PUSH_URL, true);
-        xhr.setRequestHeader('Content-Type', 'application/json');
+        // 使用同步请求避免预检请求
+        xhr.open('POST', CONFIG.PUSH_URL, false); // 同步请求
+        
+        // 设置超时
         xhr.timeout = 10000;
         
-        xhr.onload = function() {
-            console.log('备用推送响应状态:', xhr.status);
-            if (xhr.status === 200) {
-                console.log('备用推送发送成功');
-            } else {
-                console.error('备用推送发送失败，状态码:', xhr.status);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                console.log('直接XHR状态:', xhr.status);
+                if (xhr.status === 0) {
+                    console.log('XHR被CORS阻止或网络错误');
+                    // 最后尝试：使用iframe
+                    tryIframeRequest(message, mentionedList);
+                } else if (xhr.status >= 200 && xhr.status < 300) {
+                    console.log('✅ 直接XHR推送成功');
+                } else {
+                    console.error('❌ 直接XHR推送失败:', xhr.status);
+                }
             }
         };
         
-        xhr.onerror = function() {
-            console.error('备用推送网络错误');
-        };
-        
         xhr.ontimeout = function() {
-            console.error('备用推送超时');
+            console.error('直接XHR超时');
+            tryIframeRequest(message, mentionedList);
         };
         
+        // 发送请求
         xhr.send(JSON.stringify({
             msgtype: "text",
             text: {
@@ -418,7 +431,71 @@ function sendWeChatPushFallback(message, mentionedList = []) {
             }
         }));
     } catch (error) {
-        console.error('备用推送也失败:', error);
+        console.error('直接XHR失败:', error);
+        tryIframeRequest(message, mentionedList);
+    }
+}
+
+// 使用iframe发送请求（完全绕过CORS）
+function tryIframeRequest(message, mentionedList) {
+    console.log('尝试使用iframe发送请求...');
+    
+    try {
+        // 创建一个隐藏的iframe
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.style.position = 'absolute';
+        iframe.style.left = '-9999px';
+        iframe.style.top = '-9999px';
+        
+        // 设置iframe的src为一个data URL，包含我们的请求
+        const payload = {
+            msgtype: "text",
+            text: {
+                content: message,
+                mentioned_list: mentionedList
+            }
+        };
+        
+        // 创建一个form来提交数据
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = CONFIG.PUSH_URL;
+        form.target = '_blank'; // 在新窗口打开
+        
+        // 添加数据字段
+        const dataInput = document.createElement('input');
+        dataInput.type = 'hidden';
+        dataInput.name = 'data';
+        dataInput.value = JSON.stringify(payload);
+        form.appendChild(dataInput);
+        
+        // 添加到iframe
+        iframe.onload = function() {
+            console.log('iframe加载完成（可能请求已发送）');
+            // 清理
+            setTimeout(() => {
+                if (iframe.parentNode) document.body.removeChild(iframe);
+                if (form.parentNode) document.body.removeChild(form);
+            }, 1000);
+        };
+        
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        
+        // 尝试提交
+        setTimeout(() => {
+            try {
+                form.submit();
+                console.log('iframe表单已提交（可能成功）');
+            } catch (e) {
+                console.error('iframe表单提交失败:', e);
+            }
+        }, 100);
+        
+    } catch (error) {
+        console.error('iframe方法失败:', error);
+        console.log('所有推送方法都尝试过了，请检查网络或推送地址');
     }
 }
 
