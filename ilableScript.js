@@ -25,12 +25,8 @@ const REVIEWER_BLACKLIST_ARRAY = CONFIG.REVIEWER_BLACKLIST.split(' ').filter(ite
 console.log('iLabel远程脚本开始执行');
 
 // ==================== 全局变量 ====================
-let currentLiveInfo = null;
-let currentReviewer = null;
 let popupTimer = null;
-let popupStartTime = null;
 let isInitialized = false;
-let xhrInterceptorBound = false;
 
 // ==================== 样式定义 ====================
 const STYLES = `
@@ -256,7 +252,6 @@ function addStyles() {
         styleEl.id = 'ilabel-styles';
         styleEl.textContent = STYLES;
         document.head.appendChild(styleEl);
-        console.log('弹窗样式已添加到页面');
     }
 }
 
@@ -265,8 +260,7 @@ function getBeijingTime() {
     const now = new Date();
     const beijingOffset = 8 * 60;
     const localOffset = now.getTimezoneOffset();
-    const beijingTime = new Date(now.getTime() + (beijingOffset + localOffset) * 60 * 1000);
-    return beijingTime;
+    return new Date(now.getTime() + (beijingOffset + localOffset) * 60 * 1000);
 }
 
 // 格式化时间戳
@@ -296,23 +290,22 @@ function isSameDay(timestamp1, timestamp2) {
 // 复制文本到剪贴板
 function copyToClipboard(text) {
     try {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        const success = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        
-        if (success) {
-            console.log('复制成功:', text);
+        navigator.clipboard.writeText(text).then(() => {
             return true;
-        }
+        }).catch(() => {
+            // 降级方案
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            const success = document.execCommand('copy');
+            document.body.removeChild(textarea);
+            return success;
+        });
     } catch (err) {
         console.error('复制失败:', err);
+        return false;
     }
-    return false;
 }
 
 // 解码Unicode字符串
@@ -325,157 +318,51 @@ function decodeUnicode(str) {
 
 // ==================== 推送功能 ====================
 
-// 发送企业微信推送（使用iframe绕过CORS）
+// 发送企业微信推送
 function sendWeChatPush(message, mentionedList = []) {
     console.log('准备发送企业微信推送:', { message, mentionedList });
     
-    // 使用iframe发送请求
-    sendViaIframe(message, mentionedList);
-}
-
-// 使用iframe发送请求（唯一可靠的方法）
-function sendViaIframe(message, mentionedList) {
-    try {
-        console.log('使用iframe发送企业微信推送...');
-        
-        // 创建唯一的iframe ID
-        const iframeId = 'ilabel-wechat-push-' + Date.now();
-        
-        // 创建iframe
-        const iframe = document.createElement('iframe');
-        iframe.id = iframeId;
-        iframe.name = iframeId;
-        iframe.style.display = 'none';
-        iframe.style.position = 'absolute';
-        iframe.style.left = '-9999px';
-        iframe.style.width = '1px';
-        iframe.style.height = '1px';
-        iframe.style.border = 'none';
-        
-        // 创建form
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = CONFIG.PUSH_URL;
-        form.target = iframeId;
-        form.style.display = 'none';
-        
-        // 企业微信webhook的正确JSON格式
-        const payload = {
-            msgtype: "text",
-            text: {
-                content: message,
-                mentioned_list: mentionedList.length > 0 ? mentionedList : [],
-                mentioned_mobile_list: mentionedList.length > 0 ? mentionedList : [] // 同时@手机号
-            }
-        };
-        
-        console.log('企业微信推送数据:', JSON.stringify(payload, null, 2));
-        
-        // 创建隐藏字段来传递JSON数据
-        const dataInput = document.createElement('input');
-        dataInput.type = 'hidden';
-        dataInput.name = 'data';
-        dataInput.value = JSON.stringify(payload);
-        form.appendChild(dataInput);
-        
-        // 添加到页面
-        document.body.appendChild(iframe);
-        document.body.appendChild(form);
-        
-        // iframe加载完成后的处理
-        iframe.onload = function() {
-            console.log('iframe加载完成，推送请求已发送');
-            
-            // 尝试读取响应
-            setTimeout(() => {
-                try {
-                    if (iframe.contentDocument && iframe.contentDocument.body) {
-                        const responseText = iframe.contentDocument.body.textContent || iframe.contentDocument.body.innerText;
-                        if (responseText) {
-                            console.log('企业微信响应:', responseText.substring(0, 500));
-                            try {
-                                const responseJson = JSON.parse(responseText);
-                                if (responseJson.errcode === 0) {
-                                    console.log('✅ 企业微信推送成功发送');
-                                } else {
-                                    console.error('❌ 企业微信推送失败:', responseJson.errmsg);
-                                }
-                            } catch (e) {
-                                console.log('响应不是JSON格式:', responseText.substring(0, 200));
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.log('无法读取iframe内容（CORS限制），但请求可能已成功');
-                }
-                
-                // 清理
-                setTimeout(() => {
-                    if (iframe.parentNode) {
-                        iframe.parentNode.removeChild(iframe);
-                    }
-                    if (form.parentNode) {
-                        form.parentNode.removeChild(form);
-                    }
-                }, 5000);
-            }, 1000);
-        };
-        
-        iframe.onerror = function(error) {
-            console.error('iframe加载错误:', error);
-            // 但表单可能已经提交
-        };
-        
-        // 提交表单
-        console.log('提交iframe表单到:', CONFIG.PUSH_URL);
-        form.submit();
-        
-        // 备用：直接设置iframe的src（GET请求）
-        setTimeout(() => {
-            try {
-                // 同时尝试GET请求方式
-                const params = new URLSearchParams();
-                params.append('msgtype', 'text');
-                params.append('content', message);
-                if (mentionedList.length > 0) {
-                    params.append('mentioned_list', JSON.stringify(mentionedList));
-                }
-                
-                const getIframe = document.createElement('iframe');
-                getIframe.style.display = 'none';
-                getIframe.src = CONFIG.PUSH_URL + '?' + params.toString() + '&_method=POST&_t=' + Date.now();
-                document.body.appendChild(getIframe);
-                
-                setTimeout(() => {
-                    if (getIframe.parentNode) {
-                        getIframe.parentNode.removeChild(getIframe);
-                    }
-                }, 3000);
-                
-            } catch (e) {
-                console.error('GET备用方法失败:', e);
-            }
-        }, 500);
-        
-        return true;
-        
-    } catch (error) {
-        console.error('发送推送失败:', error);
-        console.log('🚨 需要推送的消息:', {
-            消息: message,
-            需要提醒的人员: mentionedList,
-            推送地址: CONFIG.PUSH_URL,
-            时间: new Date().toLocaleString()
-        });
-        return false;
-    }
+    const payload = {
+        msgtype: "text",
+        text: {
+            content: message,
+            mentioned_list: mentionedList
+        }
+    };
+    
+    console.log('推送数据:', JSON.stringify(payload));
+    
+    // 使用fetch发送请求
+    fetch(CONFIG.PUSH_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.errcode === 0) {
+            console.log('✅ 企业微信推送成功');
+        } else {
+            console.error('❌ 企业微信推送失败:', data.errmsg);
+        }
+    })
+    .catch(error => {
+        console.error('推送请求失败:', error);
+        // 降级方案：使用img标签发送请求
+        const img = new Image();
+        const encodedMessage = encodeURIComponent(message);
+        const encodedList = encodeURIComponent(JSON.stringify(mentionedList));
+        img.src = `${CONFIG.PUSH_URL}&msgtype=text&content=${encodedMessage}&mentioned_list=${encodedList}&_t=${Date.now()}`;
+        console.log('已尝试使用降级方案发送推送');
+    });
 }
 
 // ==================== 信息获取部分 ====================
 
 // 获取审核人员信息
 async function getReviewerInfo() {
-    console.log('开始获取审核人员信息...');
     try {
         const response = await fetch('https://ilabel.weixin.qq.com/api/user/info', {
             method: 'GET',
@@ -490,13 +377,9 @@ async function getReviewerInfo() {
             const data = await response.json();
             if (data.status === 'ok' && data.data && data.data.name) {
                 const fullName = data.data.name;
-                console.log('获取到审核人员全名:', fullName);
-                
                 const dashIndex = fullName.indexOf('-');
                 if (dashIndex !== -1) {
-                    const reviewerName = fullName.substring(dashIndex + 1).trim();
-                    console.log('提取审核人员名称:', reviewerName);
-                    return reviewerName;
+                    return fullName.substring(dashIndex + 1).trim();
                 }
                 return fullName.trim();
             }
@@ -514,7 +397,6 @@ function parseLiveInfo(responseData) {
     }
     
     const liveInfo = responseData.liveInfoList[0];
-    console.log('解析直播信息:', liveInfo);
     
     return {
         liveId: liveInfo.liveId || '',
@@ -531,11 +413,9 @@ function parseLiveInfo(responseData) {
 // ==================== 信息检查部分 ====================
 
 function checkInfo(liveInfo, reviewer) {
-    console.log('开始检查直播信息...');
     
     // 1. 审核人员检查
     if (reviewer && REVIEWER_BLACKLIST_ARRAY.includes(reviewer)) {
-        console.log('审核人员在黑名单中:', reviewer);
         return {
             type: 'blacklist',
             message: '审核人员在黑名单中',
@@ -550,14 +430,7 @@ function checkInfo(liveInfo, reviewer) {
         const beijingTime = getBeijingTime();
         const currentTimestamp = Math.floor(beijingTime.getTime() / 1000);
         
-        console.log('时间检查:', {
-            开始时间: formatTimestamp(liveInfo.streamStartTime),
-            当前时间: formatTimestamp(currentTimestamp),
-            是否同一天: isSameDay(liveInfo.streamStartTime, currentTimestamp)
-        });
-        
         if (!isSameDay(liveInfo.streamStartTime, currentTimestamp)) {
-            console.log('检测到质检单（非今天）');
             return {
                 type: 'quality',
                 message: '该直播为质检单',
@@ -566,15 +439,10 @@ function checkInfo(liveInfo, reviewer) {
                 resultClass: 'ilabel-result-red'
             };
         }
-        console.log('直播是今天的（非质检单）');
     }
     
     // 3. 豁免检查
-    console.log('检查主播昵称:', liveInfo.nickname);
-    console.log('检查主播认证:', liveInfo.authStatus);
-    
     if (ANCHOR_WHITELIST_ARRAY.includes(liveInfo.nickname)) {
-        console.log('主播在白名单中:', liveInfo.nickname);
         return {
             type: 'whitelist',
             message: '该主播为白名单或事业单位',
@@ -585,7 +453,6 @@ function checkInfo(liveInfo, reviewer) {
     }
     
     if (liveInfo.authStatus && liveInfo.authStatus.includes('事业单位')) {
-        console.log('主播认证包含事业单位:', liveInfo.authStatus);
         return {
             type: 'whitelist',
             message: '该主播为白名单或事业单位',
@@ -596,7 +463,6 @@ function checkInfo(liveInfo, reviewer) {
     }
     
     // 4. 处罚检查
-    console.log('开始处罚关键词检查...');
     const checkFields = [
         { field: liveInfo.description, name: '直播间描述' },
         { field: liveInfo.nickname, name: '主播昵称' },
@@ -607,7 +473,6 @@ function checkInfo(liveInfo, reviewer) {
         if (check.field) {
             for (const keyword of PUNISHMENT_KEYWORDS_ARRAY) {
                 if (check.field.includes(keyword)) {
-                    console.log(`命中处罚关键词: ${check.name} 包含 "${keyword}"`);
                     return {
                         type: 'punishment',
                         message: `${check.name}命中处罚关键词：${keyword}`,
@@ -621,7 +486,6 @@ function checkInfo(liveInfo, reviewer) {
     }
     
     // 5. 普通单
-    console.log('所有检查通过，标记为普通单');
     return {
         type: 'normal',
         message: '该直播为普通单',
@@ -634,32 +498,24 @@ function checkInfo(liveInfo, reviewer) {
 // ==================== 弹窗显示部分 ====================
 
 function showPopup(liveInfo, reviewer, checkResult) {
-    console.log('准备显示弹窗...');
-    
     // 移除现有弹窗
     removePopup();
     
     // 检查开关状态
     const reminderEnabled = window.getReminderStatus ? window.getReminderStatus() : true;
-    console.log('提醒开关状态:', reminderEnabled ? '开启' : '关闭');
     
-    // 开关关闭时，只有普通单不显示弹窗；其他检查类型都要显示
+    // 开关关闭时，只有普通单不显示弹窗
     if (!reminderEnabled && checkResult.type === 'normal') {
-        console.log('提醒开关已关闭，普通单不显示弹窗');
         return;
     }
     
-    console.log('开始创建弹窗元素...');
-    
     // 创建遮罩
     const overlay = document.createElement('div');
-    overlay.id = 'notification-overlay';
     overlay.className = 'ilabel-overlay';
     overlay.onclick = removePopup;
     
     // 创建弹窗容器
     const notification = document.createElement('div');
-    notification.id = 'custom-notification';
     notification.className = 'ilabel-custom-notification';
     notification.onclick = (e) => e.stopPropagation();
     
@@ -685,7 +541,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
             <div class="ilabel-info-row">
                 <span class="ilabel-info-label">直播ID:</span>
                 <span class="ilabel-info-value">
-                    <span id="liveId-value" class="ilabel-liveid-value" title="点击复制">${liveInfo.liveId}</span>
+                    <span class="ilabel-liveid-value" title="点击复制">${liveInfo.liveId}</span>
                     <button class="ilabel-copy-btn">复制</button>
                 </span>
             </div>
@@ -701,23 +557,8 @@ function showPopup(liveInfo, reviewer, checkResult) {
             </div>
             
             <div class="ilabel-info-row">
-                <span class="ilabel-info-label">主播简介:</span>
-                <span class="ilabel-info-value">${liveInfo.signature || '无'}</span>
-            </div>
-            
-            <div class="ilabel-info-row">
                 <span class="ilabel-info-label">主播认证:</span>
                 <span class="ilabel-info-value">${liveInfo.authStatus || '未认证'}</span>
-            </div>
-            
-            <div class="ilabel-info-row">
-                <span class="ilabel-info-label">开播地:</span>
-                <span class="ilabel-info-value">${liveInfo.createLiveArea || '无'}</span>
-            </div>
-            
-            <div class="ilabel-info-row">
-                <span class="ilabel-info-label">开播位置:</span>
-                <span class="ilabel-info-value">${liveInfo.poiName || '无'}</span>
             </div>
             
             <div class="ilabel-info-row">
@@ -729,11 +570,6 @@ function showPopup(liveInfo, reviewer, checkResult) {
                 <span class="ilabel-info-label">审核人员:</span>
                 <span class="ilabel-info-value">${reviewer || '无'}</span>
             </div>
-            
-            <div class="ilabel-info-row">
-                <span class="ilabel-info-label">当前时间:</span>
-                <span class="ilabel-info-value">${now}</span>
-            </div>
 
             <div class="ilabel-result-box ${checkResult.resultClass}">
                 ${checkResult.message}
@@ -742,9 +578,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
         </div>
 
         <div class="ilabel-notification-footer">
-            <button id="close-notification-btn" class="ilabel-confirm-btn">
-                确认并关闭
-            </button>
+            <button class="ilabel-confirm-btn">确认并关闭</button>
         </div>
     `;
     
@@ -752,219 +586,130 @@ function showPopup(liveInfo, reviewer, checkResult) {
     document.body.appendChild(overlay);
     document.body.appendChild(notification);
     
-    console.log('弹窗已添加到页面');
-    
     // 设置事件监听
-    setTimeout(() => {
-        const closeBtn = document.getElementById('close-notification-btn');
-        const closeIcon = notification.querySelector('.ilabel-notification-close');
-        const liveIdElement = document.getElementById('liveId-value');
-        const copyBtn = notification.querySelector('.ilabel-copy-btn');
-        
-        // 确认按钮点击事件
-        if (closeBtn) {
-            closeBtn.onclick = () => {
-                console.log('确认按钮点击');
-                removePopup();
-            };
-        }
-        
-        // 关闭图标点击事件
-        if (closeIcon) {
-            closeIcon.onclick = removePopup;
-        }
-        
-        // LiveID点击复制
-        if (liveIdElement) {
-            liveIdElement.onclick = () => {
-                if (copyToClipboard(liveInfo.liveId)) {
-                    const originalText = liveIdElement.textContent;
-                    liveIdElement.textContent = '已复制!';
-                    liveIdElement.style.backgroundColor = '#52c41a';
-                    liveIdElement.style.color = 'white';
-                    setTimeout(() => {
-                        liveIdElement.textContent = originalText;
-                        liveIdElement.style.backgroundColor = '';
-                        liveIdElement.style.color = '';
-                    }, 1500);
-                }
-            };
-        }
-        
-        // 复制按钮点击
-        if (copyBtn) {
-            copyBtn.onclick = () => {
-                if (copyToClipboard(liveInfo.liveId)) {
-                    copyBtn.textContent = '已复制';
-                    copyBtn.classList.add('ilabel-copied');
-                    setTimeout(() => {
-                        copyBtn.textContent = '复制';
-                        copyBtn.classList.remove('ilabel-copied');
-                    }, 2000);
-                }
-            };
-        }
-        
-        // ESC键关闭
-        document.addEventListener('keydown', function closeOnEsc(e) {
-            if (e.key === 'Escape') {
-                removePopup();
-                document.removeEventListener('keydown', closeOnEsc);
-            }
-        });
-    }, 100);
+    const closeBtn = notification.querySelector('.ilabel-confirm-btn');
+    const closeIcon = notification.querySelector('.ilabel-notification-close');
+    const copyBtn = notification.querySelector('.ilabel-copy-btn');
     
-    // 记录弹窗开始时间
-    popupStartTime = Date.now();
+    closeBtn.onclick = removePopup;
+    closeIcon.onclick = removePopup;
     
-    // 设置推送定时器（如果审核人员在白名单中）
-    if (reviewer && REVIEWER_WHITELIST_ARRAY.includes(reviewer) && reminderEnabled) {
-        console.log('审核人员在白名单中，设置60秒后推送:', reviewer);
-        
+    copyBtn.onclick = () => {
+        if (copyToClipboard(liveInfo.liveId)) {
+            copyBtn.textContent = '已复制';
+            copyBtn.classList.add('ilabel-copied');
+            setTimeout(() => {
+                copyBtn.textContent = '复制';
+                copyBtn.classList.remove('ilabel-copied');
+            }, 2000);
+        }
+    };
+    
+    // ESC键关闭
+    const escHandler = (e) => {
+        if (e.key === 'Escape') removePopup();
+    };
+    document.addEventListener('keydown', escHandler);
+    notification._escHandler = escHandler;
+    
+    // 设置推送定时器
+    if (needPush) {
         popupTimer = setTimeout(() => {
-            // 检查弹窗是否仍然存在
-            if (document.contains(notification)) {
-                console.log('弹窗超过60秒未确认，发送推送提醒');
-                const mentionedList = [reviewer];
+            if (document.body.contains(notification)) {
                 const pushMessage = `新单未确认，${checkResult.message}`;
-                sendWeChatPush(pushMessage, mentionedList);
+                sendWeChatPush(pushMessage, [reviewer]);
                 
-                // 添加一个视觉提示
+                // 添加视觉提示
                 const resultBox = notification.querySelector('.ilabel-result-box');
-                if (resultBox) {
-                    const originalHTML = resultBox.innerHTML;
-                    resultBox.innerHTML = `
-                        <div style="color: #f5222d; font-weight: bold;">
-                            ⚠️ 已发送提醒给 ${reviewer}
-                        </div>
-                        <div style="font-size: 13px; margin-top: 5px;">
-                            ${checkResult.message}
-                        </div>
-                    `;
-                    
-                    // 5秒后恢复原状
-                    setTimeout(() => {
-                        resultBox.innerHTML = originalHTML;
-                    }, 5000);
-                }
+                const originalHTML = resultBox.innerHTML;
+                resultBox.innerHTML = `
+                    <div style="color: #f5222d; font-weight: bold;">
+                        ⚠️ 已发送提醒给 ${reviewer}
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    resultBox.innerHTML = originalHTML;
+                }, 5000);
             }
-        }, 60000); // 1分钟后
+        }, 60000);
     }
-    
-    console.log('弹窗显示完成，类型:', checkResult.type);
 }
 
 // 移除弹窗
 function removePopup() {
-    const notification = document.getElementById('custom-notification');
-    const overlay = document.getElementById('notification-overlay');
+    const notification = document.querySelector('.ilabel-custom-notification');
+    const overlay = document.querySelector('.ilabel-overlay');
     
-    if (notification) notification.remove();
+    if (notification) {
+        if (notification._escHandler) {
+            document.removeEventListener('keydown', notification._escHandler);
+        }
+        notification.remove();
+    }
+    
     if (overlay) overlay.remove();
     
     if (popupTimer) {
         clearTimeout(popupTimer);
         popupTimer = null;
-        console.log('推送定时器已取消');
     }
-    
-    popupStartTime = null;
-    console.log('弹窗已移除');
 }
 
 // ==================== 请求拦截部分 ====================
 
 // 绑定XMLHttpRequest拦截器
 function bindXHRInterceptor() {
-    if (xhrInterceptorBound) return;
+    if (XMLHttpRequest.prototype._ilabel_intercepted) return;
     
-    console.log('绑定XMLHttpRequest拦截器...');
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
     
-    const originalXHROpen = XMLHttpRequest.prototype.open;
-    const originalXHRSend = XMLHttpRequest.prototype.send;
-    
-    XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+    XMLHttpRequest.prototype.open = function(method, url) {
         this._requestURL = url;
-        this._requestMethod = method;
-        return originalXHROpen.apply(this, arguments);
+        return originalOpen.apply(this, arguments);
     };
     
     XMLHttpRequest.prototype.send = function(...args) {
-        const originalOnReadyStateChange = this.onreadystatechange;
-        const originalOnLoad = this.onload;
+        const xhr = this;
+        const originalOnReadyStateChange = xhr.onreadystatechange;
         
-        this.onreadystatechange = function() {
-            if (this.readyState === 4 && this.status === 200) {
-                handleResponse(this);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                if (xhr._requestURL && xhr._requestURL.includes('get_live_info_batch')) {
+                    try {
+                        const responseData = JSON.parse(xhr.responseText);
+                        const liveInfo = parseLiveInfo(responseData);
+                        
+                        if (liveInfo) {
+                            getReviewerInfo().then(reviewer => {
+                                const checkResult = checkInfo(liveInfo, reviewer);
+                                setTimeout(() => {
+                                    showPopup(liveInfo, reviewer, checkResult);
+                                }, 300);
+                            });
+                        }
+                    } catch (error) {
+                        console.error('处理响应数据失败:', error);
+                    }
+                }
             }
             
             if (originalOnReadyStateChange) {
-                originalOnReadyStateChange.apply(this, arguments);
+                originalOnReadyStateChange.apply(xhr, arguments);
             }
         };
         
-        this.onload = function() {
-            if (this.status === 200) {
-                handleResponse(this);
-            }
-            
-            if (originalOnLoad) {
-                originalOnLoad.apply(this, arguments);
-            }
-        };
-        
-        return originalXHRSend.apply(this, args);
+        return originalSend.apply(xhr, args);
     };
     
-    xhrInterceptorBound = true;
-    console.log('XMLHttpRequest拦截器已绑定成功');
-}
-
-// 处理响应数据
-async function handleResponse(xhr) {
-    const requestURL = xhr._requestURL;
-    
-    if (requestURL && requestURL.includes('get_live_info_batch')) {
-        console.log('检测到目标API请求:', requestURL);
-        
-        try {
-            const responseText = xhr.responseText;
-            if (responseText) {
-                const responseData = JSON.parse(responseText);
-                console.log('API响应数据:', responseData);
-                
-                const liveInfo = parseLiveInfo(responseData);
-                
-                if (liveInfo) {
-                    console.log('直播信息解析成功，获取审核人员信息...');
-                    
-                    // 获取审核人员信息
-                    const reviewer = await getReviewerInfo();
-                    console.log('审核人员:', reviewer);
-                    
-                    // 执行检查
-                    const checkResult = checkInfo(liveInfo, reviewer);
-                    console.log('检查结果:', checkResult);
-                    
-                    // 显示弹窗
-                    setTimeout(() => {
-                        showPopup(liveInfo, reviewer, checkResult);
-                    }, 300);
-                }
-            }
-        } catch (err) {
-            console.error('解析响应数据失败:', err);
-        }
-    }
+    XMLHttpRequest.prototype._ilabel_intercepted = true;
 }
 
 // ==================== 初始化 ====================
 
 function init() {
-    if (isInitialized) {
-        console.log('脚本已初始化');
-        return;
-    }
+    if (isInitialized) return;
     
     console.log('iLabel远程脚本初始化...');
     
@@ -974,57 +719,20 @@ function init() {
     // 绑定XMLHttpRequest拦截器
     bindXHRInterceptor();
     
-    // 监听DOM变化以重新绑定拦截器
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            if (mutation.addedNodes.length) {
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeName === 'SCRIPT' || node.nodeName === 'IFRAME') {
-                        console.log('检测到新的script或iframe，重新绑定拦截器');
-                        bindXHRInterceptor();
-                    }
-                });
-            }
-        });
-    });
-    
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-    
     isInitialized = true;
     console.log('iLabel远程脚本初始化完成');
 }
 
-// 初始化（立即执行）
+// 立即初始化
 (function() {
     console.log('==================== iLabel远程脚本加载 ====================');
-    console.log('开关状态函数存在:', typeof window.getReminderStatus === 'function');
-    console.log('当前开关状态:', window.getReminderStatus ? window.getReminderStatus() : '未定义');
     
-    // 立即开始初始化
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM加载完成，开始初始化');
-            init();
-        });
+        document.addEventListener('DOMContentLoaded', init);
     } else {
-        console.log('文档已就绪，立即初始化');
         init();
     }
     
-    // 防止脚本被卸载
-    window.addEventListener('beforeunload', function() {
-        console.log('页面即将卸载，重新绑定拦截器');
-        setTimeout(() => {
-            if (isInitialized) {
-                bindXHRInterceptor();
-            }
-        }, 100);
-    });
+    // 导出配置
+    window.ILABEL_CONFIG = CONFIG;
 })();
-
-// 导出配置
-window.ILABEL_CONFIG = CONFIG;
-console.log('iLabel远程脚本加载完成');
