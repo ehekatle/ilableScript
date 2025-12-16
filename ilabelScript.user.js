@@ -19,7 +19,7 @@
     'use strict';
     
     // 远程库URL
-    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/raw/refs/heads/test/ilableScript.js';
+    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/test/ilabelScript.js';
     
     // ==================== 推送功能（使用GM_xmlhttpRequest） ====================
     
