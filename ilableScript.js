@@ -322,11 +322,17 @@ function decodeUnicode(str) {
 function sendWeChatPush(message, mentionedList = []) {
     console.log('准备发送企业微信推送:', { message, mentionedList });
     
+    // 如果提到了人员，在消息内容中@他们
+    let finalMessage = message;
+    if (mentionedList.length > 0) {
+        finalMessage = message + mentionedList.map(name => ` @${name}`).join('');
+    }
+    
+    // 企业微信webhook的正确格式
     const payload = {
         msgtype: "text",
         text: {
-            content: message,
-            mentioned_list: mentionedList
+            content: finalMessage
         }
     };
     
@@ -351,11 +357,12 @@ function sendWeChatPush(message, mentionedList = []) {
         form.action = CONFIG.PUSH_URL;
         form.target = iframeId;
         form.style.display = 'none';
+        form.enctype = 'application/json';
         
         // 创建隐藏input来传递JSON数据
         const input = document.createElement('input');
         input.type = 'hidden';
-        input.name = 'payload';
+        input.name = 'data';
         input.value = JSON.stringify(payload);
         form.appendChild(input);
         
@@ -364,6 +371,7 @@ function sendWeChatPush(message, mentionedList = []) {
         document.body.appendChild(form);
         
         // 提交表单
+        console.log('提交企业微信推送:', CONFIG.PUSH_URL);
         form.submit();
         
         console.log('已通过form+iframe方式提交推送请求');
@@ -372,21 +380,19 @@ function sendWeChatPush(message, mentionedList = []) {
         setTimeout(() => {
             if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
             if (form.parentNode) form.parentNode.removeChild(form);
-        }, 3000);
+        }, 5000);
         
-        // 方法2：备用方案 - 使用img标签（GET请求）
+        // 方法2：备用方案 - 直接使用GET请求
         setTimeout(() => {
             try {
-                // 企业微信webhook也支持GET请求
-                const content = encodeURIComponent(message);
-                const mentioned = encodeURIComponent(JSON.stringify(mentionedList));
+                const content = encodeURIComponent(finalMessage);
                 const img = new Image();
-                img.src = `${CONFIG.PUSH_URL}&msgtype=text&content=${content}&mentioned_list=${mentioned}&_t=${Date.now()}`;
+                img.src = `${CONFIG.PUSH_URL}&msgtype=text&content=${content}&_t=${Date.now()}`;
                 console.log('已尝试备用GET方案');
             } catch (e) {
                 console.error('备用方案失败:', e);
             }
-        }, 1000);
+        }, 100);
         
     } catch (error) {
         console.error('推送失败:', error);
@@ -650,8 +656,8 @@ function showPopup(liveInfo, reviewer, checkResult) {
     if (needPush) {
         popupTimer = setTimeout(() => {
             if (document.body.contains(notification)) {
-                const pushMessage = `新单未确认，${checkResult.message}`;
-                sendWeChatPush(pushMessage, [reviewer]);
+                const pushMessage = `新单未确认，${checkResult.message} @${reviewer}`;
+                sendWeChatPush(pushMessage);
                 
                 // 添加视觉提示
                 const resultBox = notification.querySelector('.ilabel-result-box');
