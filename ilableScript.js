@@ -567,7 +567,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
     const needPush = reviewer && REVIEWER_WHITELIST_ARRAY.includes(reviewer) && reminderEnabled;
     const pushInfo = needPush ? 
         `<div style="color: #faad14; font-size: 13px; margin-top: 5px; text-align: center;">
-            ⚠️ 1分钟内未确认将发送提醒给 ${reviewer}
+            ⚠️ 20秒内未确认将发送提醒给 ${reviewer}
         </div>` : '';
     
     // 构建弹窗HTML
@@ -652,10 +652,16 @@ function showPopup(liveInfo, reviewer, checkResult) {
     document.addEventListener('keydown', escHandler);
     notification._escHandler = escHandler;
     
-    // 设置推送定时器
+    // 标记是否已推送过（确保每个弹窗只推送一次）
+    notification._hasPushed = false;
+    
+    // 设置推送定时器（从60秒改为20秒）
     if (needPush) {
         popupTimer = setTimeout(() => {
-            if (document.body.contains(notification)) {
+            if (document.body.contains(notification) && !notification._hasPushed) {
+                // 标记已推送
+                notification._hasPushed = true;
+                
                 const pushMessage = `新单未确认，${checkResult.message} @${reviewer}`;
                 sendWeChatPush(pushMessage);
                 
@@ -672,7 +678,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
                     resultBox.innerHTML = originalHTML;
                 }, 5000);
             }
-        }, 60000);
+        }, 20000); // 从60000改为20000（20秒）
     }
 }
 
@@ -776,4 +782,3 @@ function init() {
     // 导出配置
     window.ILABEL_CONFIG = CONFIG;
 })();
-
