@@ -318,7 +318,7 @@ function decodeUnicode(str) {
 
 // ==================== 推送功能 ====================
 
-// 发送企业微信推送
+// 发送企业微信推送（使用form+iframe绕过CORS限制）
 function sendWeChatPush(message, mentionedList = []) {
     console.log('准备发送企业微信推送:', { message, mentionedList });
     
@@ -332,31 +332,65 @@ function sendWeChatPush(message, mentionedList = []) {
     
     console.log('推送数据:', JSON.stringify(payload));
     
-    // 使用fetch发送请求
-    fetch(CONFIG.PUSH_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.errcode === 0) {
-            console.log('✅ 企业微信推送成功');
-        } else {
-            console.error('❌ 企业微信推送失败:', data.errmsg);
-        }
-    })
-    .catch(error => {
-        console.error('推送请求失败:', error);
-        // 降级方案：使用img标签发送请求
-        const img = new Image();
-        const encodedMessage = encodeURIComponent(message);
-        const encodedList = encodeURIComponent(JSON.stringify(mentionedList));
-        img.src = `${CONFIG.PUSH_URL}&msgtype=text&content=${encodedMessage}&mentioned_list=${encodedList}&_t=${Date.now()}`;
-        console.log('已尝试使用降级方案发送推送');
-    });
+    // 方法1：使用form+iframe绕过CORS
+    try {
+        // 创建隐藏的iframe
+        const iframeId = 'wechat-push-iframe-' + Date.now();
+        const iframe = document.createElement('iframe');
+        iframe.name = iframeId;
+        iframe.style.display = 'none';
+        iframe.style.position = 'absolute';
+        iframe.style.left = '-9999px';
+        iframe.style.width = '1px';
+        iframe.style.height = '1px';
+        iframe.style.border = 'none';
+        
+        // 创建form
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = CONFIG.PUSH_URL;
+        form.target = iframeId;
+        form.style.display = 'none';
+        
+        // 创建隐藏input来传递JSON数据
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(payload);
+        form.appendChild(input);
+        
+        // 添加到body
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        
+        // 提交表单
+        form.submit();
+        
+        console.log('已通过form+iframe方式提交推送请求');
+        
+        // 清理
+        setTimeout(() => {
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            if (form.parentNode) form.parentNode.removeChild(form);
+        }, 3000);
+        
+        // 方法2：备用方案 - 使用img标签（GET请求）
+        setTimeout(() => {
+            try {
+                // 企业微信webhook也支持GET请求
+                const content = encodeURIComponent(message);
+                const mentioned = encodeURIComponent(JSON.stringify(mentionedList));
+                const img = new Image();
+                img.src = `${CONFIG.PUSH_URL}&msgtype=text&content=${content}&mentioned_list=${mentioned}&_t=${Date.now()}`;
+                console.log('已尝试备用GET方案');
+            } catch (e) {
+                console.error('备用方案失败:', e);
+            }
+        }, 1000);
+        
+    } catch (error) {
+        console.error('推送失败:', error);
+    }
 }
 
 // ==================== 信息获取部分 ====================
