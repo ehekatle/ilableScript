@@ -315,7 +315,7 @@ function copyToClipboard(text) {
     return false;
 }
 
-// 解码Unicode字符串（参考旧版）
+// 解码Unicode字符串
 function decodeUnicode(str) {
     if (!str) return '';
     return str.replace(/\\u([\d\w]{4})/gi, function(match, grp) {
@@ -323,34 +323,102 @@ function decodeUnicode(str) {
     });
 }
 
-// 发送企业微信推送
-async function sendWeChatPush(message, mentionedList = []) {
+// 发送企业微信推送（使用GM_xmlhttpRequest）
+function sendWeChatPush(message, mentionedList = []) {
     console.log('尝试发送企业微信推送:', { message, mentionedList });
     
+    // 检查是否在油猴环境中
+    if (typeof GM_xmlhttpRequest !== 'undefined') {
+        console.log('使用GM_xmlhttpRequest发送推送');
+        
+        try {
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: CONFIG.PUSH_URL,
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                data: JSON.stringify({
+                    msgtype: "text",
+                    text: {
+                        content: message,
+                        mentioned_list: mentionedList
+                    }
+                }),
+                timeout: 10000,
+                onload: function(response) {
+                    console.log('推送响应状态:', response.status);
+                    if (response.status === 200) {
+                        console.log('推送发送成功');
+                        try {
+                            const data = JSON.parse(response.responseText);
+                            console.log('推送响应数据:', data);
+                        } catch (e) {
+                            console.log('推送响应:', response.responseText);
+                        }
+                    } else {
+                        console.error('推送发送失败，状态码:', response.status, '响应:', response.responseText);
+                        // 尝试备用方法
+                        sendWeChatPushFallback(message, mentionedList);
+                    }
+                },
+                onerror: function(error) {
+                    console.error('推送发送失败，网络错误:', error);
+                    // 尝试备用方法
+                    sendWeChatPushFallback(message, mentionedList);
+                },
+                ontimeout: function() {
+                    console.error('推送发送超时');
+                    sendWeChatPushFallback(message, mentionedList);
+                }
+            });
+        } catch (error) {
+            console.error('GM_xmlhttpRequest失败:', error);
+            sendWeChatPushFallback(message, mentionedList);
+        }
+    } else {
+        console.log('不在油猴环境中，使用备用方法');
+        sendWeChatPushFallback(message, mentionedList);
+    }
+}
+
+// 备用推送方法
+function sendWeChatPushFallback(message, mentionedList = []) {
+    console.log('使用备用推送方法');
+    
     try {
-        const payload = {
+        // 尝试使用原生XMLHttpRequest
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', CONFIG.PUSH_URL, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.timeout = 10000;
+        
+        xhr.onload = function() {
+            console.log('备用推送响应状态:', xhr.status);
+            if (xhr.status === 200) {
+                console.log('备用推送发送成功');
+            } else {
+                console.error('备用推送发送失败，状态码:', xhr.status);
+            }
+        };
+        
+        xhr.onerror = function() {
+            console.error('备用推送网络错误');
+        };
+        
+        xhr.ontimeout = function() {
+            console.error('备用推送超时');
+        };
+        
+        xhr.send(JSON.stringify({
             msgtype: "text",
             text: {
                 content: message,
                 mentioned_list: mentionedList
             }
-        };
-        
-        const response = await fetch(CONFIG.PUSH_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-        
-        if (response.ok) {
-            console.log('推送发送成功');
-        } else {
-            console.error('推送发送失败，状态码:', response.status);
-        }
+        }));
     } catch (error) {
-        console.error('推送发送失败:', error);
+        console.error('备用推送也失败:', error);
     }
 }
 
@@ -514,7 +582,7 @@ function checkInfo(liveInfo, reviewer) {
     };
 }
 
-// ==================== 弹窗显示部分（参考旧版） ====================
+// ==================== 弹窗显示部分 ====================
 
 function showPopup(liveInfo, reviewer, checkResult) {
     console.log('准备显示弹窗...');
@@ -550,7 +618,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
     const now = new Date().toLocaleString();
     const startTime = liveInfo.streamStartTime ? formatTimestamp(liveInfo.streamStartTime) : '无';
     
-    // 构建弹窗HTML（参考旧版样式）
+    // 构建弹窗HTML
     notification.innerHTML = `
         <div class="ilabel-notification-header ${checkResult.headerClass}">
             <span>直播审核信息</span>
@@ -629,7 +697,7 @@ function showPopup(liveInfo, reviewer, checkResult) {
     
     console.log('弹窗已添加到页面');
     
-    // 设置事件监听（参考旧版）
+    // 设置事件监听
     setTimeout(() => {
         const closeBtn = document.getElementById('close-notification-btn');
         const closeIcon = notification.querySelector('.ilabel-notification-close');
@@ -858,6 +926,7 @@ function init() {
     console.log('==================== iLabel远程脚本加载 ====================');
     console.log('开关状态函数存在:', typeof window.getReminderStatus === 'function');
     console.log('当前开关状态:', window.getReminderStatus ? window.getReminderStatus() : '未定义');
+    console.log('GM_xmlhttpRequest可用:', typeof GM_xmlhttpRequest !== 'undefined');
     
     // 立即开始初始化
     if (document.readyState === 'loading') {
