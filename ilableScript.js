@@ -329,165 +329,146 @@ function decodeUnicode(str) {
 function sendWeChatPush(message, mentionedList = []) {
     console.log('准备发送企业微信推送:', { message, mentionedList });
     
-    // 主要方法：使用iframe表单提交（可以绕过CORS）
-    if (sendViaIframe(message, mentionedList)) {
-        console.log('✅ iframe推送请求已发送');
-        return;
-    }
-    
-    // 备用：在控制台显示消息
-    console.log('🚨 需要推送的消息:', {
-        消息: message,
-        需要提醒的人员: mentionedList,
-        推送地址: CONFIG.PUSH_URL,
-        时间: new Date().toLocaleString()
-    });
-    
-    // 尝试一个更简单的iframe方法
-    sendViaSimpleIframe(message, mentionedList);
+    // 使用iframe发送请求
+    sendViaIframe(message, mentionedList);
 }
 
-// 使用iframe发送请求（主方法）
+// 使用iframe发送请求（唯一可靠的方法）
 function sendViaIframe(message, mentionedList) {
     try {
-        console.log('尝试iframe表单提交...');
+        console.log('使用iframe发送企业微信推送...');
         
-        // 创建一个临时iframe
-        const iframeId = 'ilabel-push-iframe-' + Date.now();
+        // 创建唯一的iframe ID
+        const iframeId = 'ilabel-wechat-push-' + Date.now();
+        
+        // 创建iframe
         const iframe = document.createElement('iframe');
         iframe.id = iframeId;
         iframe.name = iframeId;
         iframe.style.display = 'none';
         iframe.style.position = 'absolute';
         iframe.style.left = '-9999px';
-        iframe.style.top = '-9999px';
+        iframe.style.width = '1px';
+        iframe.style.height = '1px';
+        iframe.style.border = 'none';
         
-        // 创建一个form
-        const formId = 'ilabel-push-form-' + Date.now();
+        // 创建form
         const form = document.createElement('form');
-        form.id = formId;
         form.method = 'POST';
         form.action = CONFIG.PUSH_URL;
         form.target = iframeId;
         form.style.display = 'none';
         
-        // 构建payload
+        // 企业微信webhook的正确JSON格式
         const payload = {
             msgtype: "text",
             text: {
                 content: message,
-                mentioned_list: mentionedList
+                mentioned_list: mentionedList.length > 0 ? mentionedList : [],
+                mentioned_mobile_list: mentionedList.length > 0 ? mentionedList : [] // 同时@手机号
             }
         };
         
-        // 添加隐藏字段
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'payload';
-        input.value = JSON.stringify(payload);
-        form.appendChild(input);
+        console.log('企业微信推送数据:', JSON.stringify(payload, null, 2));
         
-        // 添加到文档
+        // 创建隐藏字段来传递JSON数据
+        const dataInput = document.createElement('input');
+        dataInput.type = 'hidden';
+        dataInput.name = 'data';
+        dataInput.value = JSON.stringify(payload);
+        form.appendChild(dataInput);
+        
+        // 添加到页面
         document.body.appendChild(iframe);
         document.body.appendChild(form);
         
-        // 设置iframe加载回调
+        // iframe加载完成后的处理
         iframe.onload = function() {
-            console.log('iframe加载完成，推送可能已发送');
-            // 清理
+            console.log('iframe加载完成，推送请求已发送');
+            
+            // 尝试读取响应
             setTimeout(() => {
-                if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-                if (form.parentNode) form.parentNode.removeChild(form);
-            }, 3000);
+                try {
+                    if (iframe.contentDocument && iframe.contentDocument.body) {
+                        const responseText = iframe.contentDocument.body.textContent || iframe.contentDocument.body.innerText;
+                        if (responseText) {
+                            console.log('企业微信响应:', responseText.substring(0, 500));
+                            try {
+                                const responseJson = JSON.parse(responseText);
+                                if (responseJson.errcode === 0) {
+                                    console.log('✅ 企业微信推送成功发送');
+                                } else {
+                                    console.error('❌ 企业微信推送失败:', responseJson.errmsg);
+                                }
+                            } catch (e) {
+                                console.log('响应不是JSON格式:', responseText.substring(0, 200));
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('无法读取iframe内容（CORS限制），但请求可能已成功');
+                }
+                
+                // 清理
+                setTimeout(() => {
+                    if (iframe.parentNode) {
+                        iframe.parentNode.removeChild(iframe);
+                    }
+                    if (form.parentNode) {
+                        form.parentNode.removeChild(form);
+                    }
+                }, 5000);
+            }, 1000);
         };
         
-        iframe.onerror = function() {
-            console.log('iframe加载错误，但请求可能已发送');
+        iframe.onerror = function(error) {
+            console.error('iframe加载错误:', error);
+            // 但表单可能已经提交
         };
         
         // 提交表单
+        console.log('提交iframe表单到:', CONFIG.PUSH_URL);
         form.submit();
-        console.log('iframe表单已提交');
         
-        // 验证请求是否真的发送了
-        verifyRequestSent();
+        // 备用：直接设置iframe的src（GET请求）
+        setTimeout(() => {
+            try {
+                // 同时尝试GET请求方式
+                const params = new URLSearchParams();
+                params.append('msgtype', 'text');
+                params.append('content', message);
+                if (mentionedList.length > 0) {
+                    params.append('mentioned_list', JSON.stringify(mentionedList));
+                }
+                
+                const getIframe = document.createElement('iframe');
+                getIframe.style.display = 'none';
+                getIframe.src = CONFIG.PUSH_URL + '?' + params.toString() + '&_method=POST&_t=' + Date.now();
+                document.body.appendChild(getIframe);
+                
+                setTimeout(() => {
+                    if (getIframe.parentNode) {
+                        getIframe.parentNode.removeChild(getIframe);
+                    }
+                }, 3000);
+                
+            } catch (e) {
+                console.error('GET备用方法失败:', e);
+            }
+        }, 500);
         
         return true;
         
     } catch (error) {
-        console.error('iframe方法失败:', error);
+        console.error('发送推送失败:', error);
+        console.log('🚨 需要推送的消息:', {
+            消息: message,
+            需要提醒的人员: mentionedList,
+            推送地址: CONFIG.PUSH_URL,
+            时间: new Date().toLocaleString()
+        });
         return false;
     }
-}
-
-// 更简单的iframe方法（备用）
-function sendViaSimpleIframe(message, mentionedList) {
-    try {
-        console.log('尝试简单iframe方法...');
-        
-        // 创建一个新窗口/标签页来发送请求
-        const payload = {
-            msgtype: "text",
-            text: {
-                content: message,
-                mentioned_list: mentionedList
-            }
-        };
-        
-        // 创建一个临时的form，在新窗口打开
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = CONFIG.PUSH_URL;
-        form.target = '_blank';
-        form.style.display = 'none';
-        
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'data';
-        input.value = JSON.stringify(payload);
-        form.appendChild(input);
-        
-        document.body.appendChild(form);
-        
-        // 设置一个超时后自动关闭的窗口
-        const newWindow = window.open('', '_blank');
-        if (newWindow) {
-            form.target = 'push-window-' + Date.now();
-            form.submit();
-            
-            // 3秒后尝试关闭窗口
-            setTimeout(() => {
-                try {
-                    newWindow.close();
-                } catch (e) {
-                    // 忽略关闭错误
-                }
-            }, 3000);
-            
-            console.log('简单iframe方法已执行');
-        }
-        
-        // 清理
-        setTimeout(() => {
-            if (form.parentNode) form.parentNode.removeChild(form);
-        }, 5000);
-        
-    } catch (error) {
-        console.error('简单iframe方法失败:', error);
-    }
-}
-
-// 验证请求是否发送（通过图片加载）
-function verifyRequestSent() {
-    // 尝试加载一个图片来验证网络连接
-    const testImg = new Image();
-    testImg.onload = function() {
-        console.log('✅ 网络连接正常，iframe请求可能已成功发送');
-    };
-    testImg.onerror = function() {
-        console.log('⚠️ 网络可能有问题，但iframe请求可能已发送');
-    };
-    testImg.src = 'https://www.google.com/favicon.ico?t=' + Date.now();
 }
 
 // ==================== 信息获取部分 ====================
@@ -1021,7 +1002,6 @@ function init() {
     console.log('==================== iLabel远程脚本加载 ====================');
     console.log('开关状态函数存在:', typeof window.getReminderStatus === 'function');
     console.log('当前开关状态:', window.getReminderStatus ? window.getReminderStatus() : '未定义');
-    console.log('GM_xmlhttpRequest可用:', typeof GM_xmlhttpRequest !== 'undefined');
     
     // 立即开始初始化
     if (document.readyState === 'loading') {
