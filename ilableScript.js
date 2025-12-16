@@ -27,6 +27,8 @@ let currentLiveInfo = null;
 let currentReviewer = null;
 let popupTimer = null;
 let popupStartTime = null;
+let isInitialized = false;
+let xhrInterceptorBound = false;
 
 // ==================== 样式定义 ====================
 const STYLES = `
@@ -231,11 +233,9 @@ function addStyles() {
 
 // 获取网络北京时间
 function getBeijingTime() {
-    // 创建一个当前时间的副本
     const now = new Date();
-    // 北京在东八区，UTC+8
-    const beijingOffset = 8 * 60; // 分钟数
-    const localOffset = now.getTimezoneOffset(); // 本地时区偏移（分钟）
+    const beijingOffset = 8 * 60;
+    const localOffset = now.getTimezoneOffset();
     const beijingTime = new Date(now.getTime() + (beijingOffset + localOffset) * 60 * 1000);
     return beijingTime;
 }
@@ -328,7 +328,6 @@ async function getReviewerInfo() {
             const data = await response.json();
             if (data.status === 'ok' && data.data && data.data.name) {
                 const fullName = data.data.name;
-                // 提取"-"后面的部分
                 const dashIndex = fullName.indexOf('-');
                 if (dashIndex !== -1) {
                     return fullName.substring(dashIndex + 1);
@@ -389,7 +388,7 @@ function checkInfo(liveInfo, reviewer) {
     
     // 3. 豁免检查
     if (ANCHOR_WHITELIST_ARRAY.includes(liveInfo.nickname) || 
-        liveInfo.authStatus.includes('事业单位')) {
+        (liveInfo.authStatus && liveInfo.authStatus.includes('事业单位'))) {
         return {
             type: 'whitelist',
             message: '该主播为白名单或事业单位',
@@ -579,23 +578,62 @@ function removePopup() {
 
 // ==================== 请求拦截部分 ====================
 
-// 拦截Fetch请求
-function interceptFetch() {
-    const originalFetch = window.fetch;
-    window.fetch = async function(...args) {
-        const [url, options = {}] = args;
+// 绑定XMLHttpRequest拦截器（参考您的工作脚本）
+function bindXHRInterceptor() {
+    if (xhrInterceptorBound) return;
+    
+    const originalXHROpen = XMLHttpRequest.prototype.open;
+    const originalXHRSend = XMLHttpRequest.prototype.send;
+    
+    XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+        this._requestURL = url;
+        this._requestMethod = method;
+        return originalXHROpen.apply(this, arguments);
+    };
+    
+    XMLHttpRequest.prototype.send = function(...args) {
+        const originalOnReadyStateChange = this.onreadystatechange;
+        const originalOnLoad = this.onload;
         
-        // 检查是否是目标URL
-        if (typeof url === 'string' && url.includes('/api/third/liveinspectioncgi_inner?action=get_live_info_batch')) {
-            try {
-                const response = await originalFetch.apply(this, args);
-                const clone = response.clone();
-                
-                // 获取响应数据
-                const data = await clone.json();
-                const liveInfo = parseLiveInfo(data);
+        this.onreadystatechange = function() {
+            if (this.readyState === 4 && this.status === 200) {
+                handleResponse(this);
+            }
+            
+            if (originalOnReadyStateChange) {
+                originalOnReadyStateChange.apply(this, arguments);
+            }
+        };
+        
+        this.onload = function() {
+            if (this.status === 200) {
+                handleResponse(this);
+            }
+            
+            if (originalOnLoad) {
+                originalOnLoad.apply(this, arguments);
+            }
+        };
+        
+        return originalXHRSend.apply(this, args);
+    };
+    
+    xhrInterceptorBound = true;
+    console.log('XMLHttpRequest拦截器已绑定');
+}
+
+// 处理响应数据
+async function handleResponse(xhr) {
+    if (xhr._requestURL && xhr._requestURL.includes('get_live_info_batch')) {
+        try {
+            const responseText = xhr.responseText;
+            if (responseText) {
+                const responseData = JSON.parse(responseText);
+                const liveInfo = parseLiveInfo(responseData);
                 
                 if (liveInfo) {
+                    console.log('检测到直播信息请求，开始处理...');
+                    
                     // 获取审核人员信息
                     const reviewer = await getReviewerInfo();
                     
@@ -605,84 +643,82 @@ function interceptFetch() {
                     // 显示弹窗
                     setTimeout(() => {
                         showPopup(liveInfo, reviewer, checkResult);
-                    }, 500); // 延迟显示，避免影响页面操作
+                    }, 500);
                 }
-                
-                return response;
-            } catch (error) {
-                console.error('处理请求失败:', error);
-                return originalFetch.apply(this, args);
             }
+        } catch (err) {
+            console.error('解析响应数据失败:', err);
         }
-        
-        return originalFetch.apply(this, args);
-    };
-}
-
-// 拦截XMLHttpRequest
-function interceptXHR() {
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
-    
-    XMLHttpRequest.prototype.open = function(method, url, ...args) {
-        this._url = url;
-        return originalOpen.apply(this, [method, url, ...args]);
-    };
-    
-    XMLHttpRequest.prototype.send = function(...args) {
-        if (this._url && this._url.includes('/api/third/liveinspectioncgi_inner?action=get_live_info_batch')) {
-            const originalOnReadyStateChange = this.onreadystatechange;
-            
-            this.onreadystatechange = function() {
-                if (this.readyState === 4 && this.status === 200) {
-                    try {
-                        const data = JSON.parse(this.responseText);
-                        const liveInfo = parseLiveInfo(data);
-                        
-                        if (liveInfo) {
-                            // 异步处理，避免阻塞
-                            setTimeout(async () => {
-                                const reviewer = await getReviewerInfo();
-                                const checkResult = checkInfo(liveInfo, reviewer);
-                                showPopup(liveInfo, reviewer, checkResult);
-                            }, 500);
-                        }
-                    } catch (error) {
-                        console.error('解析响应失败:', error);
-                    }
-                }
-                
-                if (originalOnReadyStateChange) {
-                    originalOnReadyStateChange.apply(this, arguments);
-                }
-            };
-        }
-        
-        return originalSend.apply(this, args);
-    };
+    }
 }
 
 // ==================== 初始化 ====================
 
 function init() {
+    if (isInitialized) {
+        console.log('脚本已初始化');
+        return;
+    }
+    
     console.log('iLabel远程脚本初始化...');
     
     // 添加样式
     addStyles();
     
-    // 设置请求拦截
-    interceptFetch();
-    interceptXHR();
+    // 绑定XMLHttpRequest拦截器（使用参考脚本的方法）
+    bindXHRInterceptor();
     
+    // 监听DOM变化以重新绑定拦截器
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.addedNodes.length) {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeName === 'SCRIPT' || node.nodeName === 'IFRAME') {
+                        bindXHRInterceptor();
+                    }
+                });
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    isInitialized = true;
     console.log('iLabel远程脚本初始化完成');
 }
 
-// 等待主脚本加载完成
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+// 初始化（使用参考脚本的初始化方式）
+(function() {
+    console.log('iLabel直播审核辅助工具远程库加载成功');
+    
+    if (document.readyState === 'complete') {
+        setTimeout(() => {
+            if (!isInitialized) {
+                init();
+            }
+        }, 1000);
+    } else {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                if (!isInitialized) {
+                    init();
+                }
+            }, 1000);
+        });
+    }
+    
+    // 防止脚本被卸载
+    window.addEventListener('beforeunload', function() {
+        setTimeout(() => {
+            if (isInitialized) {
+                bindXHRInterceptor();
+            }
+        }, 100);
+    });
+})();
 
 // 导出配置（可选）
 window.ILABEL_CONFIG = CONFIG;
