@@ -561,6 +561,22 @@ function showPopup(liveInfo, reviewer, checkResult) {
     console.log('弹窗已显示，类型:', checkResult.type, '开关状态:', reminderEnabled ? '开启' : '关闭');
 }
 
+// 移除弹窗
+function removePopup() {
+    const popup = document.querySelector('.ilabel-popup');
+    const overlay = document.querySelector('.ilabel-overlay');
+    
+    if (popup) popup.remove();
+    if (overlay) overlay.remove();
+    
+    if (popupTimer) {
+        clearTimeout(popupTimer);
+        popupTimer = null;
+    }
+    
+    popupStartTime = null;
+}
+
 // ==================== 请求拦截部分 ====================
 
 // 拦截Fetch请求
@@ -670,4 +686,3 @@ if (document.readyState === 'loading') {
 
 // 导出配置（可选）
 window.ILABEL_CONFIG = CONFIG;
-
