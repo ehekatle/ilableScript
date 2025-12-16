@@ -465,7 +465,7 @@ function checkInfo(liveInfo, reviewer) {
         };
     }
     
-    // 2. 质检单检查
+    // 2. 预埋单检查
     if (liveInfo.streamStartTime) {
         const beijingTime = getBeijingTime();
         const currentTimestamp = Math.floor(beijingTime.getTime() / 1000);
@@ -473,7 +473,7 @@ function checkInfo(liveInfo, reviewer) {
         if (!isSameDay(liveInfo.streamStartTime, currentTimestamp)) {
             return {
                 type: 'quality',
-                message: '该直播为质检单',
+                message: '该直播为预埋单',
                 color: 'red',
                 headerClass: 'ilabel-header-red',
                 resultClass: 'ilabel-result-red'
@@ -776,3 +776,4 @@ function init() {
     // 导出配置
     window.ILABEL_CONFIG = CONFIG;
 })();
+
