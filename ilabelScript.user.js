@@ -9,7 +9,7 @@
 // @supportURL   https://github.com/ehekatle/ilableScript/issues
 // @updateURL    https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.meta.js
 // @downloadURL  https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
-// @match        https://ilabel.weixin.qq.com/*
+// @match        https://ilabel.weixin.qq.com/mixed-task/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=weixin.qq.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
@@ -25,7 +25,7 @@
 
     // 全局变量
     const SWITCH_KEY = 'ilabel_reminder_enabled';
-    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/test/ilableScript.js';
+    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/main/ilableScript.js';
     
     // 本地版本号
     const LOCAL_VERSION = '2.4.1';
@@ -850,20 +850,20 @@
         popup.appendChild(buttonContainer);
         document.body.appendChild(popup);
 
-        // 启动监控（1秒后推送）
+        // 启动监控（10秒后推送）
         lastPopupTime = Date.now();
         popupConfirmed = false;
         monitorPopup();
     }
 
-    // 监控弹窗（1秒后推送）
+    // 监控弹窗（10秒后推送）
     function monitorPopup() {
         popupCheckInterval = setInterval(() => {
             const popupExists = !!document.getElementById('ilabel-alert-popup');
             const timeElapsed = Date.now() - lastPopupTime;
 
-            // 1秒后检查并推送
-            if (timeElapsed > 1000 && popupExists && currentLiveData && config) {
+            // 10秒后检查并推送
+            if (timeElapsed > 10000 && popupExists && currentLiveData && config) {
                 const auditorName = currentLiveData.auditor;
                 
                 // 检查是否在白名单中
@@ -886,7 +886,7 @@
                 clearInterval(popupCheckInterval);
                 popupCheckInterval = null;
             }
-        }, 500); // 每0.5秒检查一次
+        }, 1000); // 每1秒检查一次
     }
     
     // 检查审核人员是否在白名单中（支持新老格式）
@@ -922,7 +922,7 @@
         const mentionedMobile = getAuditorMobile(auditorName);
         
         // 企业微信通知内容
-        let content = `新单未确认，请处理\n审核人员: ${auditorName}`;
+        let content = `新单未确认，请处理`;
         
         const data = {
             msgtype: "text",
