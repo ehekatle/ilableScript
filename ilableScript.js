@@ -4,7 +4,7 @@
 const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博器".split(' ');
 
 // 处罚检查关键词（空格分隔）
-const penaltyKeywords = "金包 金重量 金含量 金镯子 金项链 金子这么便宜 缅 曼德勒 越南".split(' ');
+const penaltyKeywords = "金包 金重量 金含量 金镯子 金项链 金子这么便宜 缅 曼德勒 越南 老仓库".split(' ');
 
 // 审核白名单 - 姓名+手机号格式
 const auditorWhiteList = [
@@ -151,5 +151,6 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
 
