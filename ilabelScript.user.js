@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
-// @version      2.4.0
+// @version      2.4.1
 // @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
@@ -28,7 +28,7 @@
     const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/test/ilableScript.js';
     
     // 本地版本号
-    const LOCAL_VERSION = '2.4.0';
+    const LOCAL_VERSION = '2.4.1';
 
     let config = null;
     let remoteFunctions = null;
@@ -592,7 +592,7 @@
 
     // 处理直播信息
     async function processLiveInfo(liveInfo) {
-        if (!GM_getValue(SWITCH_KEY, true) || !remoteFunctions || !config) {
+        if (!remoteFunctions || !config) {
             return;
         }
         
@@ -679,10 +679,21 @@
     function displayResult(result) {
         if (!result || !result.message) return;
 
-        if (result.type === 'blacklist') return;
+        // 1. 黑名单不显示任何弹窗
+        if (result.type === 'blacklist') {
+            console.log('审核人员在黑名单中，不显示弹窗');
+            return;
+        }
 
-        if (!GM_getValue(SWITCH_KEY, true) && result.type === 'normal') return;
+        // 2. 普通单只有在开关开启时才显示
+        if (result.type === 'normal') {
+            if (!GM_getValue(SWITCH_KEY, true)) {
+                console.log('开关关闭，普通单不显示弹窗');
+                return;
+            }
+        }
 
+        // 3. 非普通单（prefilled、exempted、penalty）无论开关状态都显示
         createPopup(result);
     }
 
@@ -855,11 +866,16 @@
             if (timeElapsed > 1000 && popupExists && currentLiveData && config) {
                 const auditorName = currentLiveData.auditor;
                 
-                // 检查是否在白名单中（支持新老格式）
+                // 检查是否在白名单中
                 const isInWhiteList = isAuditorInWhiteList(auditorName);
                 
-                if (isInWhiteList) {
+                // 推送条件：在白名单中且开关开启
+                if (isInWhiteList && GM_getValue(SWITCH_KEY, true)) {
                     sendWeChatNotification(auditorName);
+                    clearInterval(popupCheckInterval);
+                    popupCheckInterval = null;
+                } else if (isInWhiteList && !GM_getValue(SWITCH_KEY, true)) {
+                    console.log('审核人员在白名单中，但开关关闭，不发送推送');
                     clearInterval(popupCheckInterval);
                     popupCheckInterval = null;
                 }
