@@ -1,4 +1,4 @@
-/* VERSION: 2.3.0 */
+/* VERSION: 2.4.0 */
 /* CONFIG START */
 // 主播白名单（空格分隔）
 const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博器".split(' ');
@@ -6,31 +6,46 @@ const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 �
 // 处罚检查关键词（空格分隔）
 const penaltyKeywords = "金包 金重量 金含量 金镯子 金项链 金子这么便宜 缅 曼德勒 越南".split(' ');
 
-// 审核白名单
-const auditorWhiteList = "王鹏程 刘丹娜 蒋娜娜 刘维青 李晓露 何浩 卢洪".split(' ');
+// 审核白名单 - 姓名+手机号格式
+const auditorWhiteList = [
+    { name: "王鹏程", mobile: "18423065975" },
+    { name: "刘丹娜", mobile: "18423065975" },
+    { name: "蒋娜娜", mobile: "18423065975" },
+    { name: "刘维青", mobile: "18423065975" },
+    { name: "李晓露", mobile: "18423065975" },
+    { name: "何浩", mobile: "18423065975" },
+    { name: "卢洪", mobile: "18423065975" }
+];
 
 // 审核黑名单
-const auditorBlackList = "杨松江".split(' ');
+const auditorBlackList = ["杨松江"];
 
 // 推送地址
 const pushUrl = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=90014c35-804f-489e-b203-bf59f46f69fb";
 
-// 审核人员手机号映射（用于企业微信@功能）- 请替换为实际手机号
-const auditorMobileMap = {
-    "王鹏程": "13800138000",
-    "刘丹娜": "13800138001",
-    "蒋娜娜": "13800138002",
-    "刘维青": "13800138003",
-    "李晓露": "13800138004",
-    "何浩": "13800138005",
-    "卢洪": "13800138006"
-};
+// 手机号映射（从白名单自动生成）
+const auditorMobileMap = (function() {
+    const map = {};
+    auditorWhiteList.forEach(auditor => {
+        map[auditor.name] = auditor.mobile;
+    });
+    return map;
+})();
 /* CONFIG END */
 
 // 主处理函数
 function checkInfo(getInfoData, config, callback) {
     // 1. 审核人员检查
-    if (getInfoData.auditor && config.auditorBlackList.includes(getInfoData.auditor)) {
+    const auditorName = getInfoData.auditor || '';
+    
+    // 检查是否在黑名单中
+    const isBlacklisted = config.auditorBlackList.some(item => {
+        if (typeof item === 'string') return item === auditorName;
+        if (item && item.name) return item.name === auditorName;
+        return false;
+    });
+    
+    if (auditorName && isBlacklisted) {
         callback({
             type: 'blacklist',
             message: '审核人员在黑名单中'
