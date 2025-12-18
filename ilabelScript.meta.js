@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
-// @version      2.1.0
+// @version      2.1.1
 // @description  预埋、豁免、直播信息违规、超时提示功能，最终版
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
@@ -12,5 +12,8 @@
 // @match        https://ilabel.weixin.qq.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=weixin.qq.com
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_addStyle
 // @run-at       document-start
 // ==/UserScript==
