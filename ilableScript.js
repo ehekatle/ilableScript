@@ -1,4 +1,4 @@
-/* VERSION: 2.4.0 */
+/* VERSION: 2.4.1 */
 /* CONFIG START */
 // 主播白名单（空格分隔）
 const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博器".split(' ');
@@ -9,12 +9,12 @@ const penaltyKeywords = "金包 金重量 金含量 金镯子 金项链 金子�
 // 审核白名单 - 姓名+手机号格式
 const auditorWhiteList = [
     { name: "王鹏程", mobile: "18423065975" },
-    { name: "刘丹娜", mobile: "18423065975" },
-    { name: "蒋娜娜", mobile: "18423065975" },
-    { name: "刘维青", mobile: "18423065975" },
-    { name: "李晓露", mobile: "18423065975" },
-    { name: "何浩", mobile: "18423065975" },
-    { name: "卢洪", mobile: "18423065975" }
+    { name: "刘丹娜", mobile: "18323846400" },
+    { name: "蒋娜娜", mobile: "" },
+    { name: "刘维青", mobile: "15310703511" },
+    { name: "李晓露", mobile: "" },
+    { name: "何浩", mobile: "" },
+    { name: "卢洪", mobile: "18883245082" }
 ];
 
 // 审核黑名单
@@ -151,3 +151,4 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
