@@ -15,9 +15,9 @@ const auditorBlackList = "杨松江".split(' ');
 // 推送地址
 const pushUrl = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=90014c35-804f-489e-b203-bf59f46f69fb";
 
-// 审核人员手机号映射（用于企业微信@功能）
+// 审核人员手机号映射（用于企业微信@功能）- 请替换为实际手机号
 const auditorMobileMap = {
-    "王鹏程": "13800138000",  // 请替换为实际手机号
+    "王鹏程": "13800138000",
     "刘丹娜": "13800138001",
     "蒋娜娜": "13800138002",
     "刘维青": "13800138003",
