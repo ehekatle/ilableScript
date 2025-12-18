@@ -21,7 +21,7 @@ const auditorWhiteList = [
 const auditorBlackList = ["杨松江"];
 
 // 推送地址
-const pushUrl = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=90014c35-804f-489e-b203-bf59f46f69fb";
+const pushUrl = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=23f0bbf8-3665-4f4d-b66a-16ac364b6b8f";
 
 // 手机号映射（从白名单自动生成）
 const auditorMobileMap = (function() {
@@ -151,6 +151,7 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
 
 
