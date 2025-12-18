@@ -922,7 +922,7 @@
         const mentionedMobile = getAuditorMobile(auditorName);
         
         // 企业微信通知内容
-        let content = `新单未确认，请处理`;
+        let content = `新单未确认`;
         
         const data = {
             msgtype: "text",
