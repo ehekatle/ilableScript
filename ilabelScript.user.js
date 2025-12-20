@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
-// @version      2.4.2
+// @version      2.4.3
 // @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
@@ -608,7 +608,7 @@
                 description: liveInfo.description || '',
                 nickname: liveInfo.nickname || '',
                 signature: liveInfo.signature || '',
-                authStatus: liveInfo.authStatus || '',
+                authStatus: liveInfo.authStatus || '',  // 新增：主播认证
                 createLiveArea: liveInfo.extraField?.createLiveArea || '',
                 poiName: liveInfo.poiName || '',
                 streamStartTime: liveInfo.streamStartTime || ''
@@ -777,10 +777,11 @@
                     <span class="ilabel-copy-liveid" onclick="this.copyLiveID('${currentLiveData.liveid}')">${currentLiveData.liveid}</span>
                 </div>
                 <div style="margin-bottom: 6px;"><strong>主播昵称:</strong> ${currentLiveData.nickname}</div>
+                <div style="margin-bottom: 6px;"><strong>主播认证:</strong> ${currentLiveData.authStatus || '无认证'}</div>  <!-- 新增：主播认证显示 -->
                 <div style="margin-bottom: 6px;"><strong>直播间描述:</strong> ${currentLiveData.description || '无'}</div>
                 <div style="margin-bottom: 6px;"><strong>开播地:</strong> ${currentLiveData.createLiveArea || '未知'}</div>
                 <div style="margin-bottom: 6px;"><strong>开播位置:</strong> ${currentLiveData.poiName || '未知'}</div>
-                <div style="margin-bottom: 6px;"><strong>开播时间:</strong> ${formatTime(currentLiveData.streamStartTime)}</div>
+                <div style="margin-bottom: 6px;"><strong>开播时间:</strong> ${formatTime(currentLiveData.streamStartTime)}${timeDiffText}</div>
                 <div style="margin-bottom: 6px;"><strong>送审时间:</strong> ${formatTime(currentLiveData.audit_time)}</div>
                 <div style="margin-bottom: 6px;"><strong>审核人员:</strong> ${currentLiveData.auditor || '未知'}</div>
             `;
