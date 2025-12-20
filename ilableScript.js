@@ -1,4 +1,4 @@
-/* VERSION: 2.4.1 */
+/* VERSION: 2.4.3 */
 /* CONFIG START */
 // 主播白名单（空格分隔）
 const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博器".split(' ');
@@ -155,3 +155,4 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
