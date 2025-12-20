@@ -62,7 +62,7 @@ function checkInfo(getInfoData, config, callback) {
         return;
     }
 
-    // 3. 豁免检查
+    // 3. 豁免检查 - 新增主播认证检查
     if (isExempted(getInfoData, config)) {
         callback({
             type: 'exempted',
@@ -108,14 +108,18 @@ function isPrefilledOrder(data) {
     return !isSameDay || isAuditEarly;
 }
 
-// 检查是否豁免
+// 检查是否豁免 - 修改：增加主播认证检查
 function isExempted(data, config) {
     // 检查主播昵称是否在白名单中
-    if (data.nickname && config.anchorWhiteList && config.anchorWhiteList.some(item => data.nickname.includes(item))) {
-        return true;
+    if (data.nickname && config.anchorWhiteList) {
+        for (let i = 0; i < config.anchorWhiteList.length; i++) {
+            if (config.anchorWhiteList[i] && data.nickname.includes(config.anchorWhiteList[i])) {
+                return true;
+            }
+        }
     }
     
-    // 检查主播认证是否包含"事业单位"
+    // 检查主播认证是否包含"事业单位" - 新增
     if (data.authStatus && data.authStatus.includes('事业单位')) {
         return true;
     }
@@ -151,9 +155,3 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
-
-
-
-
-
-
