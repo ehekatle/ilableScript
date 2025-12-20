@@ -18,7 +18,7 @@ const auditorWhiteList = [
 ];
 
 // 审核黑名单
-const auditorBlackList = ["杨松江"];
+const auditorBlackList = [""];
 
 // 推送地址
 const pushUrl = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=23f0bbf8-3665-4f4d-b66a-16ac364b6b8f";
@@ -151,6 +151,7 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
 
 
