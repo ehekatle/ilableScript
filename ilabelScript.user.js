@@ -7,8 +7,8 @@
 // @homepage     https://github.com/ehekatle/ilableScript
 // @source       https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
 // @supportURL   https://github.com/ehekatle/ilableScript/issues
-// @updateURL    https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.meta.js
-// @downloadURL  https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
+// @updateURL    https://gh-proxy.org/https/raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.meta.js
+// @downloadURL  https://gh-proxy.org/https/raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
 // @match        https://ilabel.weixin.qq.com/mixed-task/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=weixin.qq.com
 // @grant        GM_xmlhttpRequest
@@ -26,13 +26,14 @@
     // 全局变量
     const SWITCH_KEY = 'ilabel_reminder_enabled';
     const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/main/ilableScript.js';
-    
+
     // 本地版本号
-    const LOCAL_VERSION = '2.4.1';
+    const LOCAL_VERSION = GM_info.script.version;
 
     let config = null;
     let remoteFunctions = null;
     let currentLiveData = null;
+    let currentResultType = null;
     let lastPopupTime = null;
     let popupConfirmed = true;
     let popupCheckInterval = null;
@@ -139,7 +140,7 @@
             100% { transform: scale(1); opacity: 1; }
         }
 
-        /* 版本信息提示 */
+        /* 版本信息提示 - 黑色气泡 */
         .ilabel-version-tooltip {
             position: absolute;
             bottom: 100%;
@@ -147,15 +148,20 @@
             transform: translateX(-50%);
             background: #333;
             color: white;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 12px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
             white-space: nowrap;
-            margin-bottom: 5px;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.3s, visibility 0.3s;
+            transition: all 0.3s ease;
             z-index: 1000000;
+            pointer-events: none;
+            min-width: 120px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+            margin-bottom: 10px;
         }
 
         .ilabel-version-tooltip:after {
@@ -164,7 +170,7 @@
             top: 100%;
             left: 50%;
             transform: translateX(-50%);
-            border: 5px solid transparent;
+            border: 6px solid transparent;
             border-top-color: #333;
         }
 
@@ -285,21 +291,21 @@
         // 提取远程版本号
         const versionMatch = scriptContent.match(/\/\*\s*VERSION:\s*([\d\.]+)\s*\*\//);
         remoteVersion = versionMatch ? versionMatch[1].trim() : null;
-        
+
         if (!remoteVersion) {
             console.error('未找到远程版本号');
             updateStatusDot('error');
             showError('远程配置缺少版本号');
             return;
         }
-        
+
         // 检查版本一致性
         if (remoteVersion !== LOCAL_VERSION) {
             console.warn(`版本不匹配: 本地=${LOCAL_VERSION}, 远程=${remoteVersion}`);
             updateStatusDot('warning');
             return;
         }
-        
+
         // 解析配置
         const configMatch = scriptContent.match(/\/\* CONFIG START \*\/([\s\S]*?)\/\* CONFIG END \*\//);
         if (configMatch) {
@@ -324,7 +330,7 @@
                 try {
                     config.auditorWhiteList = new Function('return ' + auditorWhiteListMatch[1].trim() + ';')();
                     console.log('审核白名单加载成功:', config.auditorWhiteList);
-                    
+
                     // 提取姓名列表用于兼容性检查
                     config.auditorNameList = config.auditorWhiteList.map(item => item.name);
                 } catch (e) {
@@ -351,9 +357,9 @@
 
             // 解析手机号映射（新增）
             parseMobileMap(configStr);
-            
+
             console.log('配置加载成功:', config);
-            
+
             // 版本一致，继续加载功能函数
             loadRemoteFunctions(scriptContent);
         } else {
@@ -362,7 +368,7 @@
             showError('远程配置格式错误');
         }
     }
-    
+
     // 加载远程功能函数
     function loadRemoteFunctions(scriptContent) {
         // 提取函数部分
@@ -376,6 +382,8 @@
                 `);
                 console.log('远程函数创建成功');
                 updateStatusDot('success');
+                // 远程脚本加载成功后更新气泡
+                updateVersionTooltip();
             } catch (e) {
                 console.error('创建远程函数失败:', e);
                 updateStatusDot('error');
@@ -387,12 +395,12 @@
             showError('远程功能函数格式错误');
         }
     }
-    
+
     // 解析手机号映射
     function parseMobileMap(configStr) {
         // 查找手机号映射定义
         const mapMatch = configStr.match(/const\s+auditorMobileMap\s*=\s*\(function\(\)\s*\{[\s\S]*?\}\)\(\);/);
-        
+
         if (mapMatch) {
             try {
                 // 直接执行该函数获取映射
@@ -409,11 +417,11 @@
             generateMobileMapFromWhiteList();
         }
     }
-    
+
     // 从白名单生成手机号映射
     function generateMobileMapFromWhiteList() {
         config.auditorMobileMap = {};
-        
+
         if (config.auditorWhiteList && Array.isArray(config.auditorWhiteList)) {
             config.auditorWhiteList.forEach(auditor => {
                 if (auditor && auditor.name && auditor.mobile) {
@@ -430,7 +438,7 @@
     function createSwitchButton() {
         const container = document.createElement('div');
         container.className = 'ilabel-switch-container';
-        container.title = '审核提醒开关（悬停查看状态）';
+        //container.title = '审核提醒开关';
 
         const switchContainer = document.createElement('label');
         switchContainer.className = 'ilabel-switch';
@@ -445,11 +453,9 @@
         // 保存状态变化
         checkbox.addEventListener('change', function() {
             GM_setValue(SWITCH_KEY, this.checked);
-            updateSwitchTitle(container, checkbox);
+            updateVersionTooltip(); // 更新气泡提示
             console.log('提醒状态:', this.checked ? '开启' : '关闭');
         });
-
-        updateSwitchTitle(container, checkbox);
 
         switchContainer.appendChild(checkbox);
         switchContainer.appendChild(slider);
@@ -460,54 +466,55 @@
         statusDot.className = 'ilabel-status-dot loading';
         statusDot.setAttribute('id', 'ilabel-status-dot');
         container.appendChild(statusDot);
-        
-        // 添加版本信息提示
+
+        // 添加版本信息提示气泡
         const versionTooltip = document.createElement('div');
         versionTooltip.className = 'ilabel-version-tooltip';
         versionTooltip.id = 'ilabel-version-tooltip';
-        updateVersionTooltip(versionTooltip);
+        // 设置初始内容
+        versionTooltip.textContent = '加载中...';
         container.appendChild(versionTooltip);
 
-        // 悬停显示详细信息
-        let hoverTimeout;
-        container.addEventListener('mouseenter', () => {
-            hoverTimeout = setTimeout(() => {
-                const status = checkbox.checked ? '开启' : '关闭';
-                let configStatus = '未加载';
-                if (config) {
-                    configStatus = '已加载';
-                    if (remoteVersion !== LOCAL_VERSION) {
-                        configStatus += ` (版本不匹配: 本地${LOCAL_VERSION} 远程${remoteVersion})`;
-                    }
-                }
-                container.title = `审核提醒: ${status} | 远程配置: ${configStatus}`;
-                updateVersionTooltip(versionTooltip);
-            }, 300);
-        });
-
-        container.addEventListener('mouseleave', () => {
-            clearTimeout(hoverTimeout);
-            updateSwitchTitle(container, checkbox);
-        });
+        // 初始化气泡提示
+        updateVersionTooltip();
 
         return container;
     }
-    
-    // 更新开关标题
-    function updateSwitchTitle(container, checkbox) {
-        const status = checkbox.checked ? '提醒已开启' : '提醒已关闭';
-        container.title = `审核提醒开关 - ${status}`;
-    }
-    
-    // 更新版本提示
-    function updateVersionTooltip(tooltip) {
-        if (!remoteVersion) {
-            tooltip.textContent = `本地版本: ${LOCAL_VERSION} (远程未加载)`;
-        } else if (remoteVersion === LOCAL_VERSION) {
-            tooltip.textContent = `版本一致: ${LOCAL_VERSION}`;
-        } else {
-            tooltip.textContent = `版本不匹配! 本地: ${LOCAL_VERSION} 远程: ${remoteVersion}`;
+
+    // 更新黑色气泡提示
+    function updateVersionTooltip() {
+        const tooltip = document.getElementById('ilabel-version-tooltip');
+        if (!tooltip) {
+            console.warn('未找到气泡元素');
+            return;
         }
+
+        const checkbox = document.querySelector('.ilabel-switch input[type="checkbox"]');
+        const isEnabled = checkbox ? checkbox.checked : false;
+
+        let versionStatus = '';
+        let reminderStatus = '';
+
+        // 确定版本状态
+        if (!remoteVersion) {
+            versionStatus = '未加载';
+        } else if (remoteVersion === LOCAL_VERSION) {
+            versionStatus = '版本一致';
+        } else {
+            versionStatus = '版本不同';
+        }
+
+        // 确定提醒状态
+        if (isEnabled) {
+            reminderStatus = versionStatus === '版本一致' ? '全部提醒' : '部分提醒';
+        } else {
+            reminderStatus = '部分提醒';
+        }
+
+        // 设置气泡提示文本
+        tooltip.textContent = `${versionStatus}|${reminderStatus}`;
+
+        console.log('更新气泡提示:', tooltip.textContent);
     }
 
     // 更新状态点
@@ -515,12 +522,6 @@
         const statusDot = document.getElementById('ilabel-status-dot');
         if (statusDot) {
             statusDot.className = 'ilabel-status-dot ' + status;
-
-            // 更新版本提示
-            const tooltip = document.getElementById('ilabel-version-tooltip');
-            if (tooltip) {
-                updateVersionTooltip(tooltip);
-            }
 
             // 成功状态2秒后隐藏
             if (status === 'success') {
@@ -595,7 +596,7 @@
         if (!remoteFunctions || !config) {
             return;
         }
-        
+
         // 检查版本一致性
         if (remoteVersion !== LOCAL_VERSION) {
             console.warn('版本不一致，跳过处理');
@@ -608,7 +609,7 @@
                 description: liveInfo.description || '',
                 nickname: liveInfo.nickname || '',
                 signature: liveInfo.signature || '',
-                authStatus: liveInfo.authStatus || '',  // 新增：主播认证
+                authStatus: liveInfo.authStatus || '',
                 createLiveArea: liveInfo.extraField?.createLiveArea || '',
                 poiName: liveInfo.poiName || '',
                 streamStartTime: liveInfo.streamStartTime || ''
@@ -678,6 +679,9 @@
     // 显示结果
     function displayResult(result) {
         if (!result || !result.message) return;
+
+        // 保存结果类型
+        currentResultType = result.type;
 
         // 1. 黑名单不显示任何弹窗
         if (result.type === 'blacklist') {
@@ -777,7 +781,8 @@
                     <span class="ilabel-copy-liveid" onclick="this.copyLiveID('${currentLiveData.liveid}')">${currentLiveData.liveid}</span>
                 </div>
                 <div style="margin-bottom: 6px;"><strong>主播昵称:</strong> ${currentLiveData.nickname}</div>
-                <div style="margin-bottom: 6px;"><strong>主播认证:</strong> ${currentLiveData.authStatus || '无认证'}</div>  <!-- 新增：主播认证显示 -->
+                <div style="margin-bottom: 6px;"><strong>主播认证:</strong> ${currentLiveData.authStatus || '无认证'}</div>
+                <div style="margin-bottom: 6px;"><strong>主播简介:</strong> ${currentLiveData.signature || '无'}</div>
                 <div style="margin-bottom: 6px;"><strong>直播间描述:</strong> ${currentLiveData.description || '无'}</div>
                 <div style="margin-bottom: 6px;"><strong>开播地:</strong> ${currentLiveData.createLiveArea || '未知'}</div>
                 <div style="margin-bottom: 6px;"><strong>开播位置:</strong> ${currentLiveData.poiName || '未知'}</div>
@@ -866,10 +871,10 @@
             // 10秒后检查并推送
             if (timeElapsed > 10000 && popupExists && currentLiveData && config) {
                 const auditorName = currentLiveData.auditor;
-                
+
                 // 检查是否在白名单中
                 const isInWhiteList = isAuditorInWhiteList(auditorName);
-                
+
                 // 推送条件：在白名单中且开关开启
                 if (isInWhiteList && GM_getValue(SWITCH_KEY, true)) {
                     sendWeChatNotification(auditorName);
@@ -889,11 +894,11 @@
             }
         }, 1000); // 每1秒检查一次
     }
-    
+
     // 检查审核人员是否在白名单中（支持新老格式）
     function isAuditorInWhiteList(auditorName) {
         if (!auditorName || !config) return false;
-        
+
         // 检查新版对象数组格式
         if (config.auditorWhiteList && Array.isArray(config.auditorWhiteList)) {
             return config.auditorWhiteList.some(item => {
@@ -903,13 +908,38 @@
                 return false;
             });
         }
-        
+
         // 检查老版字符串数组格式（兼容性）
         if (config.auditorNameList && Array.isArray(config.auditorNameList)) {
             return config.auditorNameList.includes(auditorName);
         }
-        
+
         return false;
+    }
+
+    // 获取初判结果文本
+    function getInitialJudgmentText() {
+        switch (currentResultType) {
+            case 'prefilled':
+                return '预埋';
+            case 'exempted':
+                return '豁免';
+            case 'penalty':
+                return '违规';
+            case 'normal':
+                return '普通';
+            default:
+                return '其他';
+        }
+    }
+
+    // 格式化时间为24小时制时分秒
+    function formatTime24() {
+        const now = new Date();
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
     }
 
     // 发送企业微信通知
@@ -921,17 +951,19 @@
 
         // 获取审核人员手机号
         const mentionedMobile = getAuditorMobile(auditorName);
-        
-        // 企业微信通知内容
-        let content = `新单未确认`;
-        
+
+        // 格式化推送内容：时间 + 初判结果 + 人员
+        const timeStr = formatTime24();
+        const judgmentText = getInitialJudgmentText();
+        const content = `${timeStr} ${judgmentText}单未确认`;
+
         const data = {
             msgtype: "text",
             text: {
                 content: content
             }
         };
-        
+
         // 如果有手机号，添加@功能
         if (mentionedMobile) {
             data.text.mentioned_mobile_list = [mentionedMobile];
@@ -962,29 +994,29 @@
             }
         });
     }
-    
+
     // 获取审核人员手机号
     function getAuditorMobile(auditorName) {
         if (!config || !config.auditorMobileMap) {
             console.warn('未配置审核人员手机号映射');
             return null;
         }
-        
+
         // 查找审核人员的手机号
         const mobile = config.auditorMobileMap[auditorName];
-        
+
         if (!mobile) {
             console.warn(`未找到审核人员 ${auditorName} 的手机号映射`);
             return null;
         }
-        
+
         // 验证手机号格式（简单的11位数字验证）
         const mobileRegex = /^1[3-9]\d{9}$/;
         if (!mobileRegex.test(mobile)) {
             console.warn(`审核人员 ${auditorName} 的手机号格式不正确: ${mobile}`);
             return null;
         }
-        
+
         return mobile;
     }
 
@@ -1008,7 +1040,8 @@
                 setTimeout(() => {
                     const existingSwitch = document.querySelector('.ilabel-switch-container');
                     if (!existingSwitch) {
-                        document.body.appendChild(createSwitchButton());
+                        const newSwitch = createSwitchButton();
+                        document.body.appendChild(newSwitch);
                     }
                 }, 1000);
             }
