@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
-// @version      2.4.2
+// @version      2.4.3
 // @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
 // @source       https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
 // @supportURL   https://github.com/ehekatle/ilableScript/issues
 // @updateURL    https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.meta.js
-// @downloadURL  https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
+// @downloadURL  https://gh-proxy.org/https/raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
 // @match        https://ilabel.weixin.qq.com/mixed-task/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=weixin.qq.com
 // @grant        GM_xmlhttpRequest
@@ -25,14 +25,15 @@
 
     // 全局变量
     const SWITCH_KEY = 'ilabel_reminder_enabled';
-    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/main/ilableScript.js';
-    
+    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/test/ilableScript.js';
+
     // 本地版本号
-    const LOCAL_VERSION = '2.4.1';
+    const LOCAL_VERSION = GM_info.script.version;
 
     let config = null;
     let remoteFunctions = null;
     let currentLiveData = null;
+    let currentResultType = null; // 新增：记录当前结果的类型
     let lastPopupTime = null;
     let popupConfirmed = true;
     let popupCheckInterval = null;
@@ -151,7 +152,6 @@
             border-radius: 4px;
             font-size: 12px;
             white-space: nowrap;
-            margin-bottom: 5px;
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.3s, visibility 0.3s;
@@ -285,21 +285,21 @@
         // 提取远程版本号
         const versionMatch = scriptContent.match(/\/\*\s*VERSION:\s*([\d\.]+)\s*\*\//);
         remoteVersion = versionMatch ? versionMatch[1].trim() : null;
-        
+
         if (!remoteVersion) {
             console.error('未找到远程版本号');
             updateStatusDot('error');
             showError('远程配置缺少版本号');
             return;
         }
-        
+
         // 检查版本一致性
         if (remoteVersion !== LOCAL_VERSION) {
             console.warn(`版本不匹配: 本地=${LOCAL_VERSION}, 远程=${remoteVersion}`);
             updateStatusDot('warning');
             return;
         }
-        
+
         // 解析配置
         const configMatch = scriptContent.match(/\/\* CONFIG START \*\/([\s\S]*?)\/\* CONFIG END \*\//);
         if (configMatch) {
@@ -324,7 +324,7 @@
                 try {
                     config.auditorWhiteList = new Function('return ' + auditorWhiteListMatch[1].trim() + ';')();
                     console.log('审核白名单加载成功:', config.auditorWhiteList);
-                    
+
                     // 提取姓名列表用于兼容性检查
                     config.auditorNameList = config.auditorWhiteList.map(item => item.name);
                 } catch (e) {
@@ -351,9 +351,9 @@
 
             // 解析手机号映射（新增）
             parseMobileMap(configStr);
-            
+
             console.log('配置加载成功:', config);
-            
+
             // 版本一致，继续加载功能函数
             loadRemoteFunctions(scriptContent);
         } else {
@@ -362,7 +362,7 @@
             showError('远程配置格式错误');
         }
     }
-    
+
     // 加载远程功能函数
     function loadRemoteFunctions(scriptContent) {
         // 提取函数部分
@@ -387,12 +387,12 @@
             showError('远程功能函数格式错误');
         }
     }
-    
+
     // 解析手机号映射
     function parseMobileMap(configStr) {
         // 查找手机号映射定义
         const mapMatch = configStr.match(/const\s+auditorMobileMap\s*=\s*\(function\(\)\s*\{[\s\S]*?\}\)\(\);/);
-        
+
         if (mapMatch) {
             try {
                 // 直接执行该函数获取映射
@@ -409,11 +409,11 @@
             generateMobileMapFromWhiteList();
         }
     }
-    
+
     // 从白名单生成手机号映射
     function generateMobileMapFromWhiteList() {
         config.auditorMobileMap = {};
-        
+
         if (config.auditorWhiteList && Array.isArray(config.auditorWhiteList)) {
             config.auditorWhiteList.forEach(auditor => {
                 if (auditor && auditor.name && auditor.mobile) {
@@ -460,7 +460,7 @@
         statusDot.className = 'ilabel-status-dot loading';
         statusDot.setAttribute('id', 'ilabel-status-dot');
         container.appendChild(statusDot);
-        
+
         // 添加版本信息提示
         const versionTooltip = document.createElement('div');
         versionTooltip.className = 'ilabel-version-tooltip';
@@ -492,13 +492,13 @@
 
         return container;
     }
-    
+
     // 更新开关标题
     function updateSwitchTitle(container, checkbox) {
         const status = checkbox.checked ? '提醒已开启' : '提醒已关闭';
         container.title = `审核提醒开关 - ${status}`;
     }
-    
+
     // 更新版本提示
     function updateVersionTooltip(tooltip) {
         if (!remoteVersion) {
@@ -595,7 +595,7 @@
         if (!remoteFunctions || !config) {
             return;
         }
-        
+
         // 检查版本一致性
         if (remoteVersion !== LOCAL_VERSION) {
             console.warn('版本不一致，跳过处理');
@@ -678,6 +678,9 @@
     // 显示结果
     function displayResult(result) {
         if (!result || !result.message) return;
+
+        // 保存结果类型
+        currentResultType = result.type;
 
         // 1. 黑名单不显示任何弹窗
         if (result.type === 'blacklist') {
@@ -777,10 +780,12 @@
                     <span class="ilabel-copy-liveid" onclick="this.copyLiveID('${currentLiveData.liveid}')">${currentLiveData.liveid}</span>
                 </div>
                 <div style="margin-bottom: 6px;"><strong>主播昵称:</strong> ${currentLiveData.nickname}</div>
+                <div style="margin-bottom: 6px;"><strong>主播认证:</strong> ${currentLiveData.authStatus || '无认证'}</div>
+                <div style="margin-bottom: 6px;"><strong>主播简介:</strong> ${currentLiveData.signature || '无'}</div>
                 <div style="margin-bottom: 6px;"><strong>直播间描述:</strong> ${currentLiveData.description || '无'}</div>
                 <div style="margin-bottom: 6px;"><strong>开播地:</strong> ${currentLiveData.createLiveArea || '未知'}</div>
                 <div style="margin-bottom: 6px;"><strong>开播位置:</strong> ${currentLiveData.poiName || '未知'}</div>
-                <div style="margin-bottom: 6px;"><strong>开播时间:</strong> ${formatTime(currentLiveData.streamStartTime)}</div>
+                <div style="margin-bottom: 6px;"><strong>开播时间:</strong> ${formatTime(currentLiveData.streamStartTime)}${timeDiffText}</div>
                 <div style="margin-bottom: 6px;"><strong>送审时间:</strong> ${formatTime(currentLiveData.audit_time)}</div>
                 <div style="margin-bottom: 6px;"><strong>审核人员:</strong> ${currentLiveData.auditor || '未知'}</div>
             `;
@@ -865,10 +870,10 @@
             // 10秒后检查并推送
             if (timeElapsed > 10000 && popupExists && currentLiveData && config) {
                 const auditorName = currentLiveData.auditor;
-                
+
                 // 检查是否在白名单中
                 const isInWhiteList = isAuditorInWhiteList(auditorName);
-                
+
                 // 推送条件：在白名单中且开关开启
                 if (isInWhiteList && GM_getValue(SWITCH_KEY, true)) {
                     sendWeChatNotification(auditorName);
@@ -888,11 +893,11 @@
             }
         }, 1000); // 每1秒检查一次
     }
-    
+
     // 检查审核人员是否在白名单中（支持新老格式）
     function isAuditorInWhiteList(auditorName) {
         if (!auditorName || !config) return false;
-        
+
         // 检查新版对象数组格式
         if (config.auditorWhiteList && Array.isArray(config.auditorWhiteList)) {
             return config.auditorWhiteList.some(item => {
@@ -902,13 +907,38 @@
                 return false;
             });
         }
-        
+
         // 检查老版字符串数组格式（兼容性）
         if (config.auditorNameList && Array.isArray(config.auditorNameList)) {
             return config.auditorNameList.includes(auditorName);
         }
-        
+
         return false;
+    }
+
+    // 获取初判结果文本
+    function getInitialJudgmentText() {
+        switch (currentResultType) {
+            case 'prefilled':
+                return '预埋';
+            case 'exempted':
+                return '豁免';
+            case 'penalty':
+                return '违规';
+            case 'normal':
+                return '普通';
+            default:
+                return '其他';
+        }
+    }
+
+    // 格式化时间为24小时制时分秒
+    function formatTime24() {
+        const now = new Date();
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
     }
 
     // 发送企业微信通知
@@ -920,17 +950,19 @@
 
         // 获取审核人员手机号
         const mentionedMobile = getAuditorMobile(auditorName);
-        
-        // 企业微信通知内容
-        let content = `新单未确认`;
-        
+
+        // 格式化推送内容：时间 + 初判结果 + 人员
+        const timeStr = formatTime24();
+        const judgmentText = getInitialJudgmentText();
+        const content = `${timeStr} ${judgmentText}单未确认`;
+
         const data = {
             msgtype: "text",
             text: {
                 content: content
             }
         };
-        
+
         // 如果有手机号，添加@功能
         if (mentionedMobile) {
             data.text.mentioned_mobile_list = [mentionedMobile];
@@ -961,29 +993,29 @@
             }
         });
     }
-    
+
     // 获取审核人员手机号
     function getAuditorMobile(auditorName) {
         if (!config || !config.auditorMobileMap) {
             console.warn('未配置审核人员手机号映射');
             return null;
         }
-        
+
         // 查找审核人员的手机号
         const mobile = config.auditorMobileMap[auditorName];
-        
+
         if (!mobile) {
             console.warn(`未找到审核人员 ${auditorName} 的手机号映射`);
             return null;
         }
-        
+
         // 验证手机号格式（简单的11位数字验证）
         const mobileRegex = /^1[3-9]\d{9}$/;
         if (!mobileRegex.test(mobile)) {
             console.warn(`审核人员 ${auditorName} 的手机号格式不正确: ${mobile}`);
             return null;
         }
-        
+
         return mobile;
     }
 
