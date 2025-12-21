@@ -25,7 +25,7 @@
 
     // 全局变量
     const SWITCH_KEY = 'ilabel_reminder_enabled';
-    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/main/ilableScript.js';
+    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.js';
 
     // 本地版本号
     const LOCAL_VERSION = GM_info.script.version;
