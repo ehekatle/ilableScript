@@ -66,7 +66,7 @@ function checkInfo(getInfoData, config, callback) {
     if (isExempted(getInfoData, config)) {
         callback({
             type: 'exempted',
-            message: '该主播为白名单或事业单位'
+            message: '该主播为白名单或事业媒体'
         });
         return;
     }
@@ -119,8 +119,8 @@ function isExempted(data, config) {
         }
     }
     
-    // 检查主播认证是否包含"事业单位" - 新增
-    if (data.authStatus && data.authStatus.includes('事业单位')) {
+    // 检查主播认证是否包含"事业媒体"
+    if (data.authStatus && data.authStatus.includes('事业媒体')) {
         return true;
     }
     
@@ -155,4 +155,5 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
