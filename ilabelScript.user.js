@@ -25,7 +25,7 @@
 
     // 全局变量
     const SWITCH_KEY = 'ilabel_reminder_enabled';
-    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/test/ilableScript.js';
+    const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://github.com/ehekatle/ilableScript/blob/main/ilableScript.js';
 
     // 本地版本号
     const LOCAL_VERSION = GM_info.script.version;
@@ -33,7 +33,7 @@
     let config = null;
     let remoteFunctions = null;
     let currentLiveData = null;
-    let currentResultType = null; // 新增：记录当前结果的类型
+    let currentResultType = null;
     let lastPopupTime = null;
     let popupConfirmed = true;
     let popupCheckInterval = null;
@@ -140,7 +140,7 @@
             100% { transform: scale(1); opacity: 1; }
         }
 
-        /* 版本信息提示 */
+        /* 版本信息提示 - 黑色气泡 */
         .ilabel-version-tooltip {
             position: absolute;
             bottom: 100%;
@@ -148,14 +148,20 @@
             transform: translateX(-50%);
             background: #333;
             color: white;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 12px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
             white-space: nowrap;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.3s, visibility 0.3s;
+            transition: all 0.3s ease;
             z-index: 1000000;
+            pointer-events: none;
+            min-width: 120px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+            margin-bottom: 10px;
         }
 
         .ilabel-version-tooltip:after {
@@ -164,7 +170,7 @@
             top: 100%;
             left: 50%;
             transform: translateX(-50%);
-            border: 5px solid transparent;
+            border: 6px solid transparent;
             border-top-color: #333;
         }
 
@@ -376,6 +382,8 @@
                 `);
                 console.log('远程函数创建成功');
                 updateStatusDot('success');
+                // 远程脚本加载成功后更新气泡
+                updateVersionTooltip();
             } catch (e) {
                 console.error('创建远程函数失败:', e);
                 updateStatusDot('error');
@@ -430,7 +438,7 @@
     function createSwitchButton() {
         const container = document.createElement('div');
         container.className = 'ilabel-switch-container';
-        container.title = '审核提醒开关（悬停查看状态）';
+        //container.title = '审核提醒开关';
 
         const switchContainer = document.createElement('label');
         switchContainer.className = 'ilabel-switch';
@@ -445,11 +453,9 @@
         // 保存状态变化
         checkbox.addEventListener('change', function() {
             GM_setValue(SWITCH_KEY, this.checked);
-            updateSwitchTitle(container, checkbox);
+            updateVersionTooltip(); // 更新气泡提示
             console.log('提醒状态:', this.checked ? '开启' : '关闭');
         });
-
-        updateSwitchTitle(container, checkbox);
 
         switchContainer.appendChild(checkbox);
         switchContainer.appendChild(slider);
@@ -461,53 +467,54 @@
         statusDot.setAttribute('id', 'ilabel-status-dot');
         container.appendChild(statusDot);
 
-        // 添加版本信息提示
+        // 添加版本信息提示气泡
         const versionTooltip = document.createElement('div');
         versionTooltip.className = 'ilabel-version-tooltip';
         versionTooltip.id = 'ilabel-version-tooltip';
-        updateVersionTooltip(versionTooltip);
+        // 设置初始内容
+        versionTooltip.textContent = '加载中...';
         container.appendChild(versionTooltip);
 
-        // 悬停显示详细信息
-        let hoverTimeout;
-        container.addEventListener('mouseenter', () => {
-            hoverTimeout = setTimeout(() => {
-                const status = checkbox.checked ? '开启' : '关闭';
-                let configStatus = '未加载';
-                if (config) {
-                    configStatus = '已加载';
-                    if (remoteVersion !== LOCAL_VERSION) {
-                        configStatus += ` (版本不匹配: 本地${LOCAL_VERSION} 远程${remoteVersion})`;
-                    }
-                }
-                container.title = `审核提醒: ${status} | 远程配置: ${configStatus}`;
-                updateVersionTooltip(versionTooltip);
-            }, 300);
-        });
-
-        container.addEventListener('mouseleave', () => {
-            clearTimeout(hoverTimeout);
-            updateSwitchTitle(container, checkbox);
-        });
+        // 初始化气泡提示
+        updateVersionTooltip();
 
         return container;
     }
 
-    // 更新开关标题
-    function updateSwitchTitle(container, checkbox) {
-        const status = checkbox.checked ? '提醒已开启' : '提醒已关闭';
-        container.title = `审核提醒开关 - ${status}`;
-    }
-
-    // 更新版本提示
-    function updateVersionTooltip(tooltip) {
-        if (!remoteVersion) {
-            tooltip.textContent = `本地版本: ${LOCAL_VERSION} (远程未加载)`;
-        } else if (remoteVersion === LOCAL_VERSION) {
-            tooltip.textContent = `版本一致: ${LOCAL_VERSION}`;
-        } else {
-            tooltip.textContent = `版本不匹配! 本地: ${LOCAL_VERSION} 远程: ${remoteVersion}`;
+    // 更新黑色气泡提示
+    function updateVersionTooltip() {
+        const tooltip = document.getElementById('ilabel-version-tooltip');
+        if (!tooltip) {
+            console.warn('未找到气泡元素');
+            return;
         }
+
+        const checkbox = document.querySelector('.ilabel-switch input[type="checkbox"]');
+        const isEnabled = checkbox ? checkbox.checked : false;
+
+        let versionStatus = '';
+        let reminderStatus = '';
+
+        // 确定版本状态
+        if (!remoteVersion) {
+            versionStatus = '未加载';
+        } else if (remoteVersion === LOCAL_VERSION) {
+            versionStatus = '版本一致';
+        } else {
+            versionStatus = '版本不同';
+        }
+
+        // 确定提醒状态
+        if (isEnabled) {
+            reminderStatus = versionStatus === '版本一致' ? '全部提醒' : '部分提醒';
+        } else {
+            reminderStatus = '部分提醒';
+        }
+
+        // 设置气泡提示文本
+        tooltip.textContent = `${versionStatus}|${reminderStatus}`;
+
+        console.log('更新气泡提示:', tooltip.textContent);
     }
 
     // 更新状态点
@@ -515,12 +522,6 @@
         const statusDot = document.getElementById('ilabel-status-dot');
         if (statusDot) {
             statusDot.className = 'ilabel-status-dot ' + status;
-
-            // 更新版本提示
-            const tooltip = document.getElementById('ilabel-version-tooltip');
-            if (tooltip) {
-                updateVersionTooltip(tooltip);
-            }
 
             // 成功状态2秒后隐藏
             if (status === 'success') {
@@ -1039,7 +1040,8 @@
                 setTimeout(() => {
                     const existingSwitch = document.querySelector('.ilabel-switch-container');
                     if (!existingSwitch) {
-                        document.body.appendChild(createSwitchButton());
+                        const newSwitch = createSwitchButton();
+                        document.body.appendChild(newSwitch);
                     }
                 }, 1000);
             }

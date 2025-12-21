@@ -1,4 +1,4 @@
-/* VERSION: 2.4.1 */
+/* VERSION: 2.4.3 */
 /* CONFIG START */
 // 主播白名单（空格分隔）
 const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博器".split(' ');
@@ -62,11 +62,11 @@ function checkInfo(getInfoData, config, callback) {
         return;
     }
 
-    // 3. 豁免检查
+    // 3. 豁免检查 - 新增主播认证检查
     if (isExempted(getInfoData, config)) {
         callback({
             type: 'exempted',
-            message: '该主播为白名单或事业单位'
+            message: '该主播为白名单或事业媒体'
         });
         return;
     }
@@ -108,15 +108,19 @@ function isPrefilledOrder(data) {
     return !isSameDay || isAuditEarly;
 }
 
-// 检查是否豁免
+// 检查是否豁免 - 修改：增加主播认证检查
 function isExempted(data, config) {
     // 检查主播昵称是否在白名单中
-    if (data.nickname && config.anchorWhiteList && config.anchorWhiteList.some(item => data.nickname.includes(item))) {
-        return true;
+    if (data.nickname && config.anchorWhiteList) {
+        for (let i = 0; i < config.anchorWhiteList.length; i++) {
+            if (config.anchorWhiteList[i] && data.nickname.includes(config.anchorWhiteList[i])) {
+                return true;
+            }
+        }
     }
     
-    // 检查主播认证是否包含"事业单位"
-    if (data.authStatus && data.authStatus.includes('事业单位')) {
+    // 检查主播认证是否包含"事业媒体"
+    if (data.authStatus && data.authStatus.includes('事业媒体')) {
         return true;
     }
     
@@ -151,9 +155,5 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
-
-
-
-
 
 
