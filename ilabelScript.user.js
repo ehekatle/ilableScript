@@ -312,7 +312,7 @@
             const configStr = configMatch[1];
             config = {};
 
-            // 解析主播白名单（字符串数组）
+            // 解析主播白名单（字符串数组）- 修改为包含匹配
             const anchorWhiteListMatch = configStr.match(/anchorWhiteList\s*=\s*"([^"]+)"/);
             if (anchorWhiteListMatch) {
                 config.anchorWhiteList = anchorWhiteListMatch[1].trim().split(/\s+/);
@@ -348,6 +348,26 @@
                 } catch (e) {
                     console.error('解析审核黑名单失败:', e);
                     config.auditorBlackList = [];
+                }
+            }
+
+            // 解析弹窗颜色配置
+            const popupColorsMatch = scriptContent.match(/const\s+popupColors\s*=\s*(\{[\s\S]*?\})\s*;/);
+            if (popupColorsMatch) {
+                try {
+                    config.popupColors = new Function('return ' + popupColorsMatch[1].trim() + ';')();
+                    console.log('弹窗颜色配置加载成功');
+                } catch (e) {
+                    console.error('解析弹窗颜色配置失败:', e);
+                    // 使用默认颜色配置
+                    config.popupColors = {
+                        prefilled: { bg: '#ffebee', border: '#f44336', text: '#c62828' },
+                        exempted: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },
+                        review: { bg: '#e3f2fd', border: '#2196f3', text: '#1565c0' },
+                        targeted: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },
+                        penalty: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },
+                        normal: { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' }
+                    };
                 }
             }
 
@@ -617,6 +637,7 @@
 
             basicInfo.auditor = await getAuditorInfo();
             basicInfo.audit_time = await getAuditTime();
+            basicInfo.auditRemark = await getAuditRemark(); // 新增：获取送审备注
 
             currentLiveData = basicInfo;
 
@@ -676,6 +697,31 @@
         return 0;
     }
 
+    // 获取送审备注（新增函数）
+    async function getAuditRemark() {
+        try {
+            const response = await fetch('https://ilabel.weixin.qq.com/api/mixed-task/assigned?task_id=10', {
+                headers: {
+                    'accept': 'application/json, text/plain, */*',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'ok' && data.data?.hits?.length > 0) {
+                    const hit = data.data.hits[0];
+                    // 获取param字段作为送审备注
+                    return hit.content_data?.content?.param || '';
+                }
+            }
+        } catch (e) {
+            console.error('获取送审备注失败:', e);
+        }
+        return '';
+    }
+
     // 显示结果
     function displayResult(result) {
         if (!result || !result.message) return;
@@ -697,7 +743,7 @@
             }
         }
 
-        // 3. 非普通单（prefilled、exempted、penalty）无论开关状态都显示
+        // 3. 非普通单（prefilled、exempted、review、targeted、penalty）无论开关状态都显示
         createPopup(result);
     }
 
@@ -712,15 +758,21 @@
             clearInterval(popupCheckInterval);
         }
 
-        // 设置颜色
-        const colors = {
-            prefilled: { bg: '#ffebee', border: '#f44336', text: '#c62828' },
-            exempted: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },
-            penalty: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },
-            normal: { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' }
-        };
-
-        const color = colors[result.type] || colors.normal;
+        // 设置颜色 - 从配置中获取颜色
+        let color;
+        if (config && config.popupColors && config.popupColors[result.type]) {
+            color = config.popupColors[result.type];
+        } else {
+            // 备用默认颜色
+            color = {
+                prefilled: { bg: '#ffebee', border: '#f44336', text: '#c62828' },
+                exempted: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },
+                review: { bg: '#e3f2fd', border: '#2196f3', text: '#1565c0' },
+                targeted: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },
+                penalty: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },
+                normal: { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' }
+            }[result.type] || { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' };
+        }
 
         const popup = document.createElement('div');
         popup.id = 'ilabel-alert-popup';
@@ -789,6 +841,7 @@
                 <div style="margin-bottom: 6px;"><strong>开播时间:</strong> ${formatTime(currentLiveData.streamStartTime)}${timeDiffText}</div>
                 <div style="margin-bottom: 6px;"><strong>送审时间:</strong> ${formatTime(currentLiveData.audit_time)}</div>
                 <div style="margin-bottom: 6px;"><strong>审核人员:</strong> ${currentLiveData.auditor || '未知'}</div>
+                <div style="margin-bottom: 6px;"><strong>送审备注:</strong> ${currentLiveData.auditRemark || '无'}</div>
             `;
         }
 
@@ -924,12 +977,14 @@
                 return '预埋';
             case 'exempted':
                 return '豁免';
+            case 'review':
+                return '复核';
+            case 'targeted':
+                return '点杀';
             case 'penalty':
                 return '违规';
-            case 'normal':
-                return '普通';
             default:
-                return '其他';
+                return '普通';
         }
     }
 
