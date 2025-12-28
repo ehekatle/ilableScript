@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
-// @version      2.4.3
+// @version      2.4.5
 // @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
@@ -312,55 +312,10 @@
             const configStr = configMatch[1];
             config = {};
 
-            // 解析主播白名单（字符串数组）
-            const anchorWhiteListMatch = configStr.match(/anchorWhiteList\s*=\s*"([^"]+)"/);
-            if (anchorWhiteListMatch) {
-                config.anchorWhiteList = anchorWhiteListMatch[1].trim().split(/\s+/);
-            }
+            // 解析所有配置（只从远程库获取）
+            parseConfigFromString(configStr);
 
-            // 解析处罚关键词（字符串数组）
-            const penaltyKeywordsMatch = configStr.match(/penaltyKeywords\s*=\s*"([^"]+)"/);
-            if (penaltyKeywordsMatch) {
-                config.penaltyKeywords = penaltyKeywordsMatch[1].trim().split(/\s+/);
-            }
-
-            // 解析审核白名单（对象数组）
-            const auditorWhiteListMatch = configStr.match(/const\s+auditorWhiteList\s*=\s*(\[[\s\S]*?\])\s*;/);
-            if (auditorWhiteListMatch) {
-                try {
-                    config.auditorWhiteList = new Function('return ' + auditorWhiteListMatch[1].trim() + ';')();
-                    console.log('审核白名单加载成功:', config.auditorWhiteList);
-
-                    // 提取姓名列表用于兼容性检查
-                    config.auditorNameList = config.auditorWhiteList.map(item => item.name);
-                } catch (e) {
-                    console.error('解析审核白名单失败:', e);
-                    config.auditorWhiteList = [];
-                    config.auditorNameList = [];
-                }
-            }
-
-            // 解析审核黑名单（字符串数组）
-            const auditorBlackListMatch = configStr.match(/auditorBlackList\s*=\s*(\[[\s\S]*?\])\s*;/);
-            if (auditorBlackListMatch) {
-                try {
-                    config.auditorBlackList = new Function('return ' + auditorBlackListMatch[1].trim() + ';')();
-                } catch (e) {
-                    console.error('解析审核黑名单失败:', e);
-                    config.auditorBlackList = [];
-                }
-            }
-
-            // 解析推送地址
-            const pushUrlMatch = configStr.match(/pushUrl\s*=\s*"([^"]+)"/);
-            config.pushUrl = pushUrlMatch ? pushUrlMatch[1].trim() : '';
-
-            // 解析手机号映射（新增）
-            parseMobileMap(configStr);
-
-            console.log('配置加载成功:', config);
-
-            // 版本一致，继续加载功能函数
+            console.log('远程配置加载成功');
             loadRemoteFunctions(scriptContent);
         } else {
             console.error('未找到配置块');
@@ -369,9 +324,89 @@
         }
     }
 
+    // 从字符串解析所有配置（只从远程库获取）
+    function parseConfigFromString(configStr) {
+        // 解析主播白名单
+        const anchorWhiteListMatch = configStr.match(/anchorWhiteList\s*=\s*"([^"]+)"/);
+        if (anchorWhiteListMatch) {
+            config.anchorWhiteList = anchorWhiteListMatch[1].trim().split(/\s+/);
+        }
+
+        // 解析处罚关键词
+        const penaltyKeywordsMatch = configStr.match(/penaltyKeywords\s*=\s*"([^"]+)"/);
+        if (penaltyKeywordsMatch) {
+            config.penaltyKeywords = penaltyKeywordsMatch[1].trim().split(/\s+/);
+        }
+
+        // 解析审核白名单
+        const auditorWhiteListMatch = configStr.match(/const\s+auditorWhiteList\s*=\s*(\[[\s\S]*?\])\s*;/);
+        if (auditorWhiteListMatch) {
+            try {
+                config.auditorWhiteList = new Function('return ' + auditorWhiteListMatch[1].trim() + ';')();
+            } catch (e) {
+                console.error('解析审核白名单失败:', e);
+                config.auditorWhiteList = [];
+            }
+        }
+
+        // 解析审核黑名单
+        const auditorBlackListMatch = configStr.match(/auditorBlackList\s*=\s*(\[[\s\S]*?\])\s*;/);
+        if (auditorBlackListMatch) {
+            try {
+                config.auditorBlackList = new Function('return ' + auditorBlackListMatch[1].trim() + ';')();
+            } catch (e) {
+                console.error('解析审核黑名单失败:', e);
+                config.auditorBlackList = [];
+            }
+        }
+
+        // 解析弹窗颜色配置
+        const popupColorsMatch = configStr.match(/const\s+popupColors\s*=\s*(\{[\s\S]*?\})\s*;/);
+        if (popupColorsMatch) {
+            try {
+                config.popupColors = new Function('return ' + popupColorsMatch[1].trim() + ';')();
+            } catch (e) {
+                console.error('解析弹窗颜色配置失败:', e);
+                // 不使用默认颜色，让远程函数处理
+            }
+        }
+
+        // 解析推送地址
+        const pushUrlMatch = configStr.match(/pushUrl\s*=\s*"([^"]+)"/);
+        if (pushUrlMatch) {
+            config.pushUrl = pushUrlMatch[1].trim();
+        }
+
+        // 解析手机号映射
+        const mobileMapMatch = configStr.match(/const\s+auditorMobileMap\s*=\s*\(function\(\)\s*\{[\s\S]*?\}\)\(\);/);
+        if (mobileMapMatch) {
+            try {
+                config.auditorMobileMap = new Function('return ' + mobileMapMatch[0].trim() + ';')();
+            } catch (e) {
+                console.error('解析手机号映射失败:', e);
+                // 从白名单生成映射
+                generateMobileMapFromWhiteList();
+            }
+        } else {
+            // 从白名单生成映射
+            generateMobileMapFromWhiteList();
+        }
+    }
+
+    // 从白名单生成手机号映射
+    function generateMobileMapFromWhiteList() {
+        config.auditorMobileMap = {};
+        if (config.auditorWhiteList && Array.isArray(config.auditorWhiteList)) {
+            config.auditorWhiteList.forEach(auditor => {
+                if (auditor && auditor.name && auditor.mobile) {
+                    config.auditorMobileMap[auditor.name] = auditor.mobile;
+                }
+            });
+        }
+    }
+
     // 加载远程功能函数
     function loadRemoteFunctions(scriptContent) {
-        // 提取函数部分
         const scriptMatch = scriptContent.match(/\/\* CONFIG END \*\/([\s\S]*)$/);
         if (scriptMatch) {
             try {
@@ -382,7 +417,6 @@
                 `);
                 console.log('远程函数创建成功');
                 updateStatusDot('success');
-                // 远程脚本加载成功后更新气泡
                 updateVersionTooltip();
             } catch (e) {
                 console.error('创建远程函数失败:', e);
@@ -396,49 +430,10 @@
         }
     }
 
-    // 解析手机号映射
-    function parseMobileMap(configStr) {
-        // 查找手机号映射定义
-        const mapMatch = configStr.match(/const\s+auditorMobileMap\s*=\s*\(function\(\)\s*\{[\s\S]*?\}\)\(\);/);
-
-        if (mapMatch) {
-            try {
-                // 直接执行该函数获取映射
-                const mapCode = mapMatch[0];
-                config.auditorMobileMap = new Function('return ' + mapCode + ';')();
-                console.log('审核人员手机号映射加载成功:', config.auditorMobileMap);
-            } catch (e) {
-                console.error('解析手机号映射失败:', e);
-                // 尝试从白名单生成映射
-                generateMobileMapFromWhiteList();
-            }
-        } else {
-            console.warn('未找到显式的手机号映射配置，尝试从白名单生成');
-            generateMobileMapFromWhiteList();
-        }
-    }
-
-    // 从白名单生成手机号映射
-    function generateMobileMapFromWhiteList() {
-        config.auditorMobileMap = {};
-
-        if (config.auditorWhiteList && Array.isArray(config.auditorWhiteList)) {
-            config.auditorWhiteList.forEach(auditor => {
-                if (auditor && auditor.name && auditor.mobile) {
-                    config.auditorMobileMap[auditor.name] = auditor.mobile;
-                }
-            });
-            console.log('从白名单生成的手机号映射:', config.auditorMobileMap);
-        } else {
-            console.warn('审核白名单格式不正确，无法生成手机号映射');
-        }
-    }
-
     // 创建开关按钮
     function createSwitchButton() {
         const container = document.createElement('div');
         container.className = 'ilabel-switch-container';
-        //container.title = '审核提醒开关';
 
         const switchContainer = document.createElement('label');
         switchContainer.className = 'ilabel-switch';
@@ -450,10 +445,9 @@
         const slider = document.createElement('span');
         slider.className = 'ilabel-switch-slider';
 
-        // 保存状态变化
         checkbox.addEventListener('change', function() {
             GM_setValue(SWITCH_KEY, this.checked);
-            updateVersionTooltip(); // 更新气泡提示
+            updateVersionTooltip();
             console.log('提醒状态:', this.checked ? '开启' : '关闭');
         });
 
@@ -461,21 +455,17 @@
         switchContainer.appendChild(slider);
         container.appendChild(switchContainer);
 
-        // 添加状态指示点
         const statusDot = document.createElement('div');
         statusDot.className = 'ilabel-status-dot loading';
-        statusDot.setAttribute('id', 'ilabel-status-dot');
+        statusDot.id = 'ilabel-status-dot';
         container.appendChild(statusDot);
 
-        // 添加版本信息提示气泡
         const versionTooltip = document.createElement('div');
         versionTooltip.className = 'ilabel-version-tooltip';
         versionTooltip.id = 'ilabel-version-tooltip';
-        // 设置初始内容
         versionTooltip.textContent = '加载中...';
         container.appendChild(versionTooltip);
 
-        // 初始化气泡提示
         updateVersionTooltip();
 
         return container;
@@ -484,18 +474,12 @@
     // 更新黑色气泡提示
     function updateVersionTooltip() {
         const tooltip = document.getElementById('ilabel-version-tooltip');
-        if (!tooltip) {
-            console.warn('未找到气泡元素');
-            return;
-        }
+        if (!tooltip) return;
 
         const checkbox = document.querySelector('.ilabel-switch input[type="checkbox"]');
         const isEnabled = checkbox ? checkbox.checked : false;
 
         let versionStatus = '';
-        let reminderStatus = '';
-
-        // 确定版本状态
         if (!remoteVersion) {
             versionStatus = '未加载';
         } else if (remoteVersion === LOCAL_VERSION) {
@@ -504,17 +488,8 @@
             versionStatus = '版本不同';
         }
 
-        // 确定提醒状态
-        if (isEnabled) {
-            reminderStatus = versionStatus === '版本一致' ? '全部提醒' : '部分提醒';
-        } else {
-            reminderStatus = '部分提醒';
-        }
-
-        // 设置气泡提示文本
+        const reminderStatus = isEnabled ? '全部提醒' : '部分提醒';
         tooltip.textContent = `${versionStatus}|${reminderStatus}`;
-
-        console.log('更新气泡提示:', tooltip.textContent);
     }
 
     // 更新状态点
@@ -522,8 +497,6 @@
         const statusDot = document.getElementById('ilabel-status-dot');
         if (statusDot) {
             statusDot.className = 'ilabel-status-dot ' + status;
-
-            // 成功状态2秒后隐藏
             if (status === 'success') {
                 setTimeout(() => {
                     if (statusDot && statusDot.className.includes('success')) {
@@ -536,15 +509,12 @@
 
     // 监听网络请求
     function setupRequestInterception() {
-        // 监听fetch请求
         const originalFetch = window.fetch;
         if (originalFetch) {
             window.fetch = function(...args) {
                 const url = args[0];
-
                 if (typeof url === 'string' && url.includes('get_live_info_batch')) {
                     const fetchPromise = originalFetch.apply(this, args);
-
                     fetchPromise.then(response => {
                         if (response.ok) {
                             response.clone().json().then(data => {
@@ -554,15 +524,12 @@
                             }).catch(() => {});
                         }
                     }).catch(() => {});
-
                     return fetchPromise;
                 }
-
                 return originalFetch.apply(this, args);
             };
         }
 
-        // 监听XMLHttpRequest
         const originalOpen = XMLHttpRequest.prototype.open;
         const originalSend = XMLHttpRequest.prototype.send;
 
@@ -581,9 +548,7 @@
                             if (data.ret === 0 && data.liveInfoList?.length > 0) {
                                 processLiveInfo(data.liveInfoList[0]);
                             }
-                        } catch (e) {
-                            // 静默处理
-                        }
+                        } catch (e) {}
                     }
                 });
             }
@@ -593,13 +558,7 @@
 
     // 处理直播信息
     async function processLiveInfo(liveInfo) {
-        if (!remoteFunctions || !config) {
-            return;
-        }
-
-        // 检查版本一致性
-        if (remoteVersion !== LOCAL_VERSION) {
-            console.warn('版本不一致，跳过处理');
+        if (!remoteFunctions || !config || remoteVersion !== LOCAL_VERSION) {
             return;
         }
 
@@ -616,13 +575,13 @@
             };
 
             basicInfo.auditor = await getAuditorInfo();
-            basicInfo.audit_time = await getAuditTime();
+
+            const auditInfo = await getAuditInfo();
+            basicInfo.audit_time = auditInfo.audit_time;
+            basicInfo.auditRemark = auditInfo.auditRemark;
 
             currentLiveData = basicInfo;
-
-            // 调用远程处理函数
             remoteFunctions(basicInfo, config, displayResult);
-
         } catch (e) {
             console.error('处理直播信息失败:', e);
         }
@@ -652,8 +611,8 @@
         return '';
     }
 
-    // 获取送审时间
-    async function getAuditTime() {
+    // 获取送审信息
+    async function getAuditInfo() {
         try {
             const response = await fetch('https://ilabel.weixin.qq.com/api/mixed-task/assigned?task_id=10', {
                 headers: {
@@ -663,33 +622,57 @@
                 credentials: 'include'
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.status === 'ok' && data.data?.hits?.length > 0) {
-                    const hit = data.data.hits[0];
-                    return hit.content_data?.content?.audit_time || 0;
+            if (!response.ok) {
+                console.error('获取送审信息HTTP错误:', response.status);
+                return { audit_time: 0, auditRemark: '' };
+            }
+
+            const data = await response.json();
+
+            if (data.status === 'ok' && data.data?.hits?.length > 0) {
+                const hit = data.data.hits[0];
+                const content = hit.content_data?.content;
+
+                if (!content) {
+                    return { audit_time: 0, auditRemark: '' };
                 }
+
+                const audit_time = content.audit_time || 0;
+                const rawRemark = content.send_remark || '';
+                const auditRemark = decodeUnicode(rawRemark);
+
+                return { audit_time, auditRemark };
             }
         } catch (e) {
-            console.error('获取送审时间失败:', e);
+            console.error('获取送审信息失败:', e);
         }
-        return 0;
+        return { audit_time: 0, auditRemark: '' };
+    }
+
+    // Unicode解码函数
+    function decodeUnicode(str) {
+        if (!str) return '';
+        try {
+            return str.replace(/\\u([\dA-F]{4})/gi,
+                (match, group) => String.fromCharCode(parseInt(group, 16)));
+        } catch (e) {
+            return str;
+        }
     }
 
     // 显示结果
     function displayResult(result) {
         if (!result || !result.message) return;
 
-        // 保存结果类型
         currentResultType = result.type;
 
-        // 1. 黑名单不显示任何弹窗
+        // 黑名单不显示任何弹窗
         if (result.type === 'blacklist') {
             console.log('审核人员在黑名单中，不显示弹窗');
             return;
         }
 
-        // 2. 普通单只有在开关开启时才显示
+        // 普通单只有在开关开启时才显示
         if (result.type === 'normal') {
             if (!GM_getValue(SWITCH_KEY, true)) {
                 console.log('开关关闭，普通单不显示弹窗');
@@ -697,30 +680,27 @@
             }
         }
 
-        // 3. 非普通单（prefilled、exempted、penalty）无论开关状态都显示
+        // 非普通单无论开关状态都显示
         createPopup(result);
     }
 
     // 创建弹窗
     function createPopup(result) {
-        // 移除旧弹窗
         const oldPopup = document.getElementById('ilabel-alert-popup');
         if (oldPopup) oldPopup.remove();
 
-        // 停止之前的监控
         if (popupCheckInterval) {
             clearInterval(popupCheckInterval);
         }
 
-        // 设置颜色
-        const colors = {
-            prefilled: { bg: '#ffebee', border: '#f44336', text: '#c62828' },
-            exempted: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },
-            penalty: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },
-            normal: { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' }
-        };
-
-        const color = colors[result.type] || colors.normal;
+        // 设置颜色 - 只从远程配置获取，不设置默认值
+        let color = null;
+        if (config && config.popupColors && config.popupColors[result.type]) {
+            color = config.popupColors[result.type];
+        } else {
+            // 如果没有配置，使用简单的默认样式
+            color = { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' };
+        }
 
         const popup = document.createElement('div');
         popup.id = 'ilabel-alert-popup';
@@ -789,6 +769,7 @@
                 <div style="margin-bottom: 6px;"><strong>开播时间:</strong> ${formatTime(currentLiveData.streamStartTime)}${timeDiffText}</div>
                 <div style="margin-bottom: 6px;"><strong>送审时间:</strong> ${formatTime(currentLiveData.audit_time)}</div>
                 <div style="margin-bottom: 6px;"><strong>审核人员:</strong> ${currentLiveData.auditor || '未知'}</div>
+                <div style="margin-bottom: 6px;"><strong>送审备注:</strong> ${currentLiveData.auditRemark || '无'}</div>
             `;
         }
 
@@ -811,23 +792,6 @@
         const buttonContainer = document.createElement('div');
         buttonContainer.className = 'ilabel-button-container';
 
-        // 确认按钮
-        const confirmBtn = document.createElement('button');
-        confirmBtn.className = 'ilabel-button';
-        confirmBtn.textContent = '确认';
-        confirmBtn.style.background = color.border;
-        confirmBtn.style.color = 'white';
-
-        confirmBtn.onclick = () => {
-            popup.remove();
-            popupConfirmed = true;
-            lastPopupTime = null;
-            if (popupCheckInterval) {
-                clearInterval(popupCheckInterval);
-                popupCheckInterval = null;
-            }
-        };
-
         // 复制按钮
         const copyBtn = document.createElement('button');
         copyBtn.className = 'ilabel-button';
@@ -845,6 +809,23 @@
                         copyBtn.style.background = '#2196f3';
                     }, 2000);
                 });
+            }
+        };
+
+        // 确认按钮
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'ilabel-button';
+        confirmBtn.textContent = '确认';
+        confirmBtn.style.background = color.border;
+        confirmBtn.style.color = 'white';
+
+        confirmBtn.onclick = () => {
+            popup.remove();
+            popupConfirmed = true;
+            lastPopupTime = null;
+            if (popupCheckInterval) {
+                clearInterval(popupCheckInterval);
+                popupCheckInterval = null;
             }
         };
 
@@ -873,7 +854,8 @@
                 const auditorName = currentLiveData.auditor;
 
                 // 检查是否在白名单中
-                const isInWhiteList = isAuditorInWhiteList(auditorName);
+                const isInWhiteList = config.auditorWhiteList &&
+                    config.auditorWhiteList.some(item => item && item.name === auditorName);
 
                 // 推送条件：在白名单中且开关开启
                 if (isInWhiteList && GM_getValue(SWITCH_KEY, true)) {
@@ -892,44 +874,18 @@
                 clearInterval(popupCheckInterval);
                 popupCheckInterval = null;
             }
-        }, 1000); // 每1秒检查一次
-    }
-
-    // 检查审核人员是否在白名单中（支持新老格式）
-    function isAuditorInWhiteList(auditorName) {
-        if (!auditorName || !config) return false;
-
-        // 检查新版对象数组格式
-        if (config.auditorWhiteList && Array.isArray(config.auditorWhiteList)) {
-            return config.auditorWhiteList.some(item => {
-                if (item && item.name) {
-                    return item.name === auditorName;
-                }
-                return false;
-            });
-        }
-
-        // 检查老版字符串数组格式（兼容性）
-        if (config.auditorNameList && Array.isArray(config.auditorNameList)) {
-            return config.auditorNameList.includes(auditorName);
-        }
-
-        return false;
+        }, 1000);
     }
 
     // 获取初判结果文本
     function getInitialJudgmentText() {
         switch (currentResultType) {
-            case 'prefilled':
-                return '预埋';
-            case 'exempted':
-                return '豁免';
-            case 'penalty':
-                return '违规';
-            case 'normal':
-                return '普通';
-            default:
-                return '其他';
+            case 'prefilled': return '预埋';
+            case 'exempted': return '豁免';
+            case 'review': return '复核';
+            case 'targeted': return '点杀';
+            case 'penalty': return '违规';
+            default: return '普通';
         }
     }
 
@@ -950,7 +906,8 @@
         }
 
         // 获取审核人员手机号
-        const mentionedMobile = getAuditorMobile(auditorName);
+        const mentionedMobile = config.auditorMobileMap &&
+                                config.auditorMobileMap[auditorName];
 
         // 格式化推送内容：时间 + 初判结果 + 人员
         const timeStr = formatTime24();
@@ -968,8 +925,6 @@
         if (mentionedMobile) {
             data.text.mentioned_mobile_list = [mentionedMobile];
             console.log(`将@审核人员: ${auditorName} (手机号: ${mentionedMobile})`);
-        } else {
-            console.warn(`未找到审核人员 ${auditorName} 的手机号映射，将发送普通通知`);
         }
 
         console.log('发送企业微信通知:', data);
@@ -995,31 +950,6 @@
         });
     }
 
-    // 获取审核人员手机号
-    function getAuditorMobile(auditorName) {
-        if (!config || !config.auditorMobileMap) {
-            console.warn('未配置审核人员手机号映射');
-            return null;
-        }
-
-        // 查找审核人员的手机号
-        const mobile = config.auditorMobileMap[auditorName];
-
-        if (!mobile) {
-            console.warn(`未找到审核人员 ${auditorName} 的手机号映射`);
-            return null;
-        }
-
-        // 验证手机号格式（简单的11位数字验证）
-        const mobileRegex = /^1[3-9]\d{9}$/;
-        if (!mobileRegex.test(mobile)) {
-            console.warn(`审核人员 ${auditorName} 的手机号格式不正确: ${mobile}`);
-            return null;
-        }
-
-        return mobile;
-    }
-
     // 显示错误提示
     function showError(message) {
         const errorDiv = document.createElement('div');
@@ -1036,7 +966,6 @@
             const url = location.href;
             if (url !== lastUrl) {
                 lastUrl = url;
-                // 页面变化时重新创建开关按钮
                 setTimeout(() => {
                     const existingSwitch = document.querySelector('.ilabel-switch-container');
                     if (!existingSwitch) {

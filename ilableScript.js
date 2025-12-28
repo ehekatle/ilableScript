@@ -1,7 +1,7 @@
-/* VERSION: 2.4.3 */
+/* VERSION: 2.4.5 */
 /* CONFIG START */
-// 主播白名单（空格分隔）
-const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博器".split(' ');
+// 主播白名单（空格分隔）- 修改为包含关键词匹配
+const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博".split(' ');
 
 // 处罚检查关键词（空格分隔）
 const penaltyKeywords = "金包 金重量 金含量 金镯子 金项链 金子这么便宜 缅 曼德勒 越南 老仓库".split(' ');
@@ -31,6 +31,16 @@ const auditorMobileMap = (function() {
     });
     return map;
 })();
+
+// 弹窗颜色配置
+const popupColors = {
+    prefilled: { bg: '#ffebee', border: '#f44336', text: '#c62828' },      // 预埋单 - 红色
+    exempted: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },       // 豁免单 - 绿色
+    review: { bg: '#e3f2fd', border: '#2196f3', text: '#1565c0' },         // 复核单 - 蓝色
+    targeted: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },       // 点杀单 - 橙色
+    penalty: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },        // 违规单 - 黄色
+    normal: { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' }          // 普通单 - 白色
+};
 /* CONFIG END */
 
 // 主处理函数
@@ -71,7 +81,17 @@ function checkInfo(getInfoData, config, callback) {
         return;
     }
 
-    // 4. 处罚检查
+    // 4. 复核单和点杀单检查（基于送审备注）
+    const remarkCheckResult = checkAuditRemark(getInfoData);
+    if (remarkCheckResult.found) {
+        callback({
+            type: remarkCheckResult.type,
+            message: remarkCheckResult.message
+        });
+        return;
+    }
+
+    // 5. 处罚检查
     const penaltyResult = checkPenalty(getInfoData, config);
     if (penaltyResult.found) {
         callback({
@@ -81,7 +101,7 @@ function checkInfo(getInfoData, config, callback) {
         return;
     }
 
-    // 5. 其他情况
+    // 6. 其他情况
     callback({
         type: 'normal',
         message: '该直播为普通单'
@@ -108,12 +128,14 @@ function isPrefilledOrder(data) {
     return !isSameDay || isAuditEarly;
 }
 
-// 检查是否豁免 - 修改：增加主播认证检查
+// 检查是否豁免 - 修改：增加主播认证检查，白名单改为包含匹配
 function isExempted(data, config) {
-    // 检查主播昵称是否在白名单中
+    // 检查主播昵称是否包含白名单关键词
     if (data.nickname && config.anchorWhiteList) {
         for (let i = 0; i < config.anchorWhiteList.length; i++) {
-            if (config.anchorWhiteList[i] && data.nickname.includes(config.anchorWhiteList[i])) {
+            const keyword = config.anchorWhiteList[i];
+            if (keyword && data.nickname.includes(keyword)) {
+                console.log(`主播昵称 "${data.nickname}" 包含白名单关键词 "${keyword}"`);
                 return true;
             }
         }
@@ -121,10 +143,41 @@ function isExempted(data, config) {
     
     // 检查主播认证是否包含"事业媒体"
     if (data.authStatus && data.authStatus.includes('事业媒体')) {
+        console.log(`主播认证包含"事业媒体": ${data.authStatus}`);
         return true;
     }
     
     return false;
+}
+
+// 检查送审备注，判断是否为复核单或点杀单
+function checkAuditRemark(data) {
+    // 获取送审备注，如果没有则为空字符串
+    const auditRemark = data.auditRemark || '';
+    
+    if (!auditRemark) {
+        return { found: false };
+    }
+    
+    // 检查是否包含"复核"
+    if (auditRemark.includes('复核')) {
+        return {
+            found: true,
+            type: 'review',
+            message: '该直播为复核单'
+        };
+    }
+    
+    // 检查是否包含"辛苦注意审核"
+    if (auditRemark.includes('辛苦注意审核')) {
+        return {
+            found: true,
+            type: 'targeted',
+            message: '该直播为点杀单'
+        };
+    }
+    
+    return { found: false };
 }
 
 // 检查处罚关键词
@@ -155,6 +208,4 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
-
-
 
