@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
-// @version      2.4.5
+// @version      2.4.6
 // @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
@@ -25,7 +25,9 @@
 
     // 全局变量
     const SWITCH_KEY = 'ilabel_reminder_enabled';
+    const ALARM_SWITCH_KEY = 'ilabel_alarm_enabled';
     const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.js';
+    const ALARM_AUDIO_URL = 'https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/music.mp3';
 
     // 本地版本号
     const LOCAL_VERSION = GM_info.script.version;
@@ -38,6 +40,9 @@
     let popupConfirmed = true;
     let popupCheckInterval = null;
     let remoteVersion = null;
+    let alarmAudio = null;
+    let isAlarmPlaying = false;
+    let pushInterval = null;
 
     // ========== 样式定义 ==========
     const STYLES = `
@@ -51,13 +56,23 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             padding: 8px;
             display: flex;
+            flex-direction: column;
             align-items: center;
+            gap: 8px;
             min-width: auto;
             transition: all 0.3s ease;
         }
 
         .ilabel-switch-container:hover {
             box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+        }
+
+        .ilabel-switch-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+            justify-content: space-between;
         }
 
         .ilabel-switch {
@@ -105,11 +120,21 @@
             transform: translateX(20px);
         }
 
+        .ilabel-switch.blue input:checked + .ilabel-switch-slider {
+            background-color: #2196f3;
+        }
+
+        .ilabel-switch-label {
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+            font-family: Arial, sans-serif;
+        }
+
         .ilabel-status-dot {
             width: 6px;
             height: 6px;
             border-radius: 50%;
-            margin-left: 6px;
             display: none;
         }
 
@@ -255,6 +280,118 @@
 
     // ========== 功能函数 ==========
 
+    // 预加载音频
+    function preloadAlarmAudio() {
+        console.log('开始预加载闹钟音频...');
+
+        // 先尝试从缓存加载
+        const cachedAudioData = GM_getValue('ilabel_alarm_audio_data', null);
+        const cachedTimestamp = GM_getValue('ilabel_alarm_audio_timestamp', 0);
+        const cacheExpiry = 24 * 60 * 60 * 1000; // 24小时缓存
+
+        if (cachedAudioData && (Date.now() - cachedTimestamp) < cacheExpiry) {
+            console.log('尝试从缓存加载音频...');
+            try {
+                // 创建Blob URL
+                const byteCharacters = atob(cachedAudioData);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'audio/mpeg' });
+                const blobUrl = URL.createObjectURL(blob);
+
+                alarmAudio = new Audio();
+                alarmAudio.src = blobUrl;
+                alarmAudio.loop = true;
+                alarmAudio.volume = 0.4;
+
+                // 预加载
+                alarmAudio.load();
+
+                alarmAudio.addEventListener('canplaythrough', function() {
+                    console.log('缓存的音频预加载完成');
+                });
+
+                alarmAudio.addEventListener('error', function(e) {
+                    console.error('缓存的音频加载失败:', e);
+                    // 缓存失败，从网络加载
+                    loadAudioFromNetwork();
+                });
+
+                return;
+            } catch (e) {
+                console.error('缓存音频处理失败:', e);
+            }
+        }
+
+        // 从网络加载
+        loadAudioFromNetwork();
+    }
+
+    // 从网络加载音频
+    function loadAudioFromNetwork() {
+        console.log('从网络加载音频...');
+
+        // 使用GM_xmlhttpRequest获取音频数据
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: ALARM_AUDIO_URL + '?t=' + Date.now(),
+            responseType: 'arraybuffer',
+            timeout: 15000,
+            onload: function(response) {
+                if (response.status === 200) {
+                    try {
+                        // 创建Blob
+                        const blob = new Blob([response.response], { type: 'audio/mpeg' });
+                        const blobUrl = URL.createObjectURL(blob);
+
+                        // 创建音频对象
+                        alarmAudio = new Audio();
+                        alarmAudio.src = blobUrl;
+                        alarmAudio.loop = true;
+                        alarmAudio.volume = 0.4;
+
+                        // 预加载
+                        alarmAudio.load();
+
+                        // 缓存音频数据
+                        const reader = new FileReader();
+                        reader.onloadend = function() {
+                            const base64data = reader.result.split(',')[1];
+                            if (base64data) {
+                                GM_setValue('ilabel_alarm_audio_data', base64data);
+                                GM_setValue('ilabel_alarm_audio_timestamp', Date.now());
+                                console.log('音频数据已缓存');
+                            }
+                        };
+                        reader.readAsDataURL(blob);
+
+                        alarmAudio.addEventListener('canplaythrough', function() {
+                            console.log('网络音频预加载完成');
+                        });
+
+                        alarmAudio.addEventListener('error', function(e) {
+                            console.error('网络音频加载失败:', e);
+                        });
+
+                    } catch (e) {
+                        console.error('处理音频数据失败:', e);
+                    }
+                } else {
+                    console.error('音频下载失败，状态码:', response.status);
+                }
+            },
+            onerror: function(error) {
+                console.error('音频下载网络错误:', error);
+            },
+            ontimeout: function() {
+                console.error('音频下载超时');
+            }
+        });
+    }
+
     // 加载远程脚本
     function loadRemoteScript() {
         console.log('开始加载远程脚本...');
@@ -391,6 +528,12 @@
             // 从白名单生成映射
             generateMobileMapFromWhiteList();
         }
+
+        // 解析事业媒体白名单
+        const enterpriseMediaListMatch = configStr.match(/enterpriseMediaWhiteList\s*=\s*"([^"]+)"/);
+        if (enterpriseMediaListMatch) {
+            config.enterpriseMediaWhiteList = enterpriseMediaListMatch[1].trim().split(/\s+/);
+        }
     }
 
     // 从白名单生成手机号映射
@@ -435,25 +578,79 @@
         const container = document.createElement('div');
         container.className = 'ilabel-switch-container';
 
-        const switchContainer = document.createElement('label');
-        switchContainer.className = 'ilabel-switch';
+        // 推送开关行
+        const pushSwitchRow = document.createElement('div');
+        pushSwitchRow.className = 'ilabel-switch-row';
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = GM_getValue(SWITCH_KEY, true);
+        const pushLabel = document.createElement('span');
+        pushLabel.className = 'ilabel-switch-label';
+        pushLabel.textContent = '推送';
+        pushLabel.style.color = '#07c160';
 
-        const slider = document.createElement('span');
-        slider.className = 'ilabel-switch-slider';
+        const pushSwitch = document.createElement('label');
+        pushSwitch.className = 'ilabel-switch';
 
-        checkbox.addEventListener('change', function() {
+        const pushCheckbox = document.createElement('input');
+        pushCheckbox.type = 'checkbox';
+        pushCheckbox.checked = GM_getValue(SWITCH_KEY, true);
+
+        const pushSlider = document.createElement('span');
+        pushSlider.className = 'ilabel-switch-slider';
+
+        pushCheckbox.addEventListener('change', function() {
             GM_setValue(SWITCH_KEY, this.checked);
             updateVersionTooltip();
-            console.log('提醒状态:', this.checked ? '开启' : '关闭');
+            console.log('推送提醒状态:', this.checked ? '开启' : '关闭');
+
+            // 如果关闭推送，清除推送定时器
+            if (!this.checked && pushInterval) {
+                clearInterval(pushInterval);
+                pushInterval = null;
+            }
         });
 
-        switchContainer.appendChild(checkbox);
-        switchContainer.appendChild(slider);
-        container.appendChild(switchContainer);
+        pushSwitch.appendChild(pushCheckbox);
+        pushSwitch.appendChild(pushSlider);
+        pushSwitchRow.appendChild(pushLabel);
+        pushSwitchRow.appendChild(pushSwitch);
+
+        // 闹钟开关行
+        const alarmSwitchRow = document.createElement('div');
+        alarmSwitchRow.className = 'ilabel-switch-row';
+
+        const alarmLabel = document.createElement('span');
+        alarmLabel.className = 'ilabel-switch-label';
+        alarmLabel.textContent = '闹钟';
+        alarmLabel.style.color = '#2196f3';
+
+        const alarmSwitch = document.createElement('label');
+        alarmSwitch.className = 'ilabel-switch blue';
+
+        const alarmCheckbox = document.createElement('input');
+        alarmCheckbox.type = 'checkbox';
+        alarmCheckbox.checked = GM_getValue(ALARM_SWITCH_KEY, false);
+
+        const alarmSlider = document.createElement('span');
+        alarmSlider.className = 'ilabel-switch-slider';
+
+        alarmCheckbox.addEventListener('change', function() {
+            GM_setValue(ALARM_SWITCH_KEY, this.checked);
+            console.log('闹钟提醒状态:', this.checked ? '开启' : '关闭');
+
+            // 如果关闭闹钟，停止所有闹钟
+            if (!this.checked) {
+                stopAlarm();
+            }
+        });
+
+        alarmSwitch.appendChild(alarmCheckbox);
+        alarmSwitch.appendChild(alarmSlider);
+        alarmSwitchRow.appendChild(alarmLabel);
+        alarmSwitchRow.appendChild(alarmSwitch);
+
+        // 组装
+        container.appendChild(pushSwitchRow);
+        container.appendChild(alarmSwitchRow);
 
         const statusDot = document.createElement('div');
         statusDot.className = 'ilabel-status-dot loading';
@@ -476,8 +673,10 @@
         const tooltip = document.getElementById('ilabel-version-tooltip');
         if (!tooltip) return;
 
-        const checkbox = document.querySelector('.ilabel-switch input[type="checkbox"]');
-        const isEnabled = checkbox ? checkbox.checked : false;
+        const pushCheckbox = document.querySelector('.ilabel-switch:not(.blue) input[type="checkbox"]');
+        const alarmCheckbox = document.querySelector('.ilabel-switch.blue input[type="checkbox"]');
+        const isPushEnabled = pushCheckbox ? pushCheckbox.checked : false;
+        const isAlarmEnabled = alarmCheckbox ? alarmCheckbox.checked : false;
 
         let versionStatus = '';
         if (!remoteVersion) {
@@ -488,8 +687,9 @@
             versionStatus = '版本不同';
         }
 
-        const reminderStatus = isEnabled ? '全部提醒' : '部分提醒';
-        tooltip.textContent = `${versionStatus}|${reminderStatus}`;
+        const pushStatus = isPushEnabled ? '推送开' : '推送关';
+        const alarmStatus = isAlarmEnabled ? '闹钟开' : '闹钟关';
+        tooltip.textContent = `${versionStatus}|${pushStatus}|${alarmStatus}`;
     }
 
     // 更新状态点
@@ -672,15 +872,15 @@
             return;
         }
 
-        // 普通单只有在开关开启时才显示
+        // 普通单只有在推送开关开启时才显示
         if (result.type === 'normal') {
             if (!GM_getValue(SWITCH_KEY, true)) {
-                console.log('开关关闭，普通单不显示弹窗');
+                console.log('推送开关关闭，普通单不显示弹窗');
                 return;
             }
         }
 
-        // 非普通单无论开关状态都显示
+        // 非普通单无论推送开关状态都显示
         createPopup(result);
     }
 
@@ -692,6 +892,13 @@
         if (popupCheckInterval) {
             clearInterval(popupCheckInterval);
         }
+
+        if (pushInterval) {
+            clearInterval(pushInterval);
+            pushInterval = null;
+        }
+
+        stopAlarm();
 
         // 设置颜色 - 只从远程配置获取，不设置默认值
         let color = null;
@@ -823,10 +1030,18 @@
             popup.remove();
             popupConfirmed = true;
             lastPopupTime = null;
+
+            // 清理所有定时器
             if (popupCheckInterval) {
                 clearInterval(popupCheckInterval);
                 popupCheckInterval = null;
             }
+            if (pushInterval) {
+                clearInterval(pushInterval);
+                pushInterval = null;
+            }
+
+            stopAlarm();
         };
 
         // 组装弹窗
@@ -837,44 +1052,162 @@
         popup.appendChild(buttonContainer);
         document.body.appendChild(popup);
 
-        // 启动监控（10秒后推送）
+        // 启动监控
         lastPopupTime = Date.now();
         popupConfirmed = false;
         monitorPopup();
     }
 
-    // 监控弹窗（10秒后推送）
+    // 监控弹窗
     function monitorPopup() {
         popupCheckInterval = setInterval(() => {
             const popupExists = !!document.getElementById('ilabel-alert-popup');
             const timeElapsed = Date.now() - lastPopupTime;
 
-            // 10秒后检查并推送
-            if (timeElapsed > 10000 && popupExists && currentLiveData && config) {
+            // 20秒后检查推送和闹钟
+            if (timeElapsed > 20000 && popupExists && currentLiveData && config) {
                 const auditorName = currentLiveData.auditor;
 
                 // 检查是否在白名单中
                 const isInWhiteList = config.auditorWhiteList &&
                     config.auditorWhiteList.some(item => item && item.name === auditorName);
 
-                // 推送条件：在白名单中且开关开启
+                // 推送条件：在白名单中且推送开关开启
                 if (isInWhiteList && GM_getValue(SWITCH_KEY, true)) {
-                    sendWeChatNotification(auditorName);
-                    clearInterval(popupCheckInterval);
-                    popupCheckInterval = null;
-                } else if (isInWhiteList && !GM_getValue(SWITCH_KEY, true)) {
-                    console.log('审核人员在白名单中，但开关关闭，不发送推送');
-                    clearInterval(popupCheckInterval);
-                    popupCheckInterval = null;
+                    // 第一次推送
+                    if (!pushInterval) {
+                        sendWeChatNotification(auditorName);
+                        // 设置每20秒推送一次
+                        pushInterval = setInterval(() => {
+                            if (popupExists && GM_getValue(SWITCH_KEY, true)) {
+                                sendWeChatNotification(auditorName);
+                            } else {
+                                clearInterval(pushInterval);
+                                pushInterval = null;
+                            }
+                        }, 20000);
+                    }
+                }
+
+                // 闹钟条件：闹钟开关开启且当前没有在响铃
+                if (GM_getValue(ALARM_SWITCH_KEY, false) && !isAlarmPlaying) {
+                    // 开始播放闹钟
+                    playAlarm();
                 }
             }
 
             // 如果弹窗已关闭，清理定时器
-            if (!popupExists && popupCheckInterval) {
-                clearInterval(popupCheckInterval);
-                popupCheckInterval = null;
+            if (!popupExists) {
+                if (popupCheckInterval) {
+                    clearInterval(popupCheckInterval);
+                    popupCheckInterval = null;
+                }
+                if (pushInterval) {
+                    clearInterval(pushInterval);
+                    pushInterval = null;
+                }
+                stopAlarm();
             }
         }, 1000);
+    }
+
+    // 播放闹钟声音
+    function playAlarm() {
+        try {
+            console.log('尝试播放闹钟...');
+
+            if (!alarmAudio) {
+                console.warn('音频对象未初始化');
+                // 尝试重新初始化
+                alarmAudio = new Audio(ALARM_AUDIO_URL + '?t=' + Date.now());
+                alarmAudio.loop = true;
+                alarmAudio.volume = 0.4;
+            }
+
+            // 检查音频是否已加载
+            if (alarmAudio.readyState < 2) { // 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
+                console.log('音频未就绪，状态:', alarmAudio.readyState);
+
+                // 重新设置音频源
+                alarmAudio.src = ALARM_AUDIO_URL + '?t=' + Date.now();
+                alarmAudio.load();
+
+                // 等待音频加载
+                alarmAudio.addEventListener('canplaythrough', function onCanPlay() {
+                    console.log('音频加载完成，开始播放');
+                    alarmAudio.removeEventListener('canplaythrough', onCanPlay);
+
+                    const playPromise = alarmAudio.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            isAlarmPlaying = true;
+                            console.log('闹钟开始播放');
+                        }).catch(error => {
+                            console.error('播放失败:', error);
+                            isAlarmPlaying = false;
+
+                            // 尝试用户交互后播放
+                            document.addEventListener('click', function tryPlayOnce() {
+                                document.removeEventListener('click', tryPlayOnce);
+                                alarmAudio.play().then(() => {
+                                    isAlarmPlaying = true;
+                                    console.log('用户交互后闹钟开始播放');
+                                }).catch(e => {
+                                    console.error('用户交互后播放仍然失败:', e);
+                                });
+                            });
+                        });
+                    }
+                });
+
+                alarmAudio.addEventListener('error', function(e) {
+                    console.error('音频加载错误:', e);
+                });
+
+            } else {
+                // 音频已就绪，直接播放
+                const playPromise = alarmAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        isAlarmPlaying = true;
+                        console.log('闹钟开始播放');
+                    }).catch(error => {
+                        console.error('播放失败:', error);
+                        isAlarmPlaying = false;
+
+                        // 自动恢复播放
+                        alarmAudio.currentTime = 0;
+                        setTimeout(() => {
+                            if (GM_getValue(ALARM_SWITCH_KEY, false) && !isAlarmPlaying) {
+                                alarmAudio.play().then(() => {
+                                    isAlarmPlaying = true;
+                                }).catch(e => {
+                                    console.error('重试播放失败:', e);
+                                });
+                            }
+                        }, 1000);
+                    });
+                }
+            }
+
+        } catch (e) {
+            console.error('播放闹钟异常:', e);
+            isAlarmPlaying = false;
+        }
+    }
+
+    // 停止闹钟
+    function stopAlarm() {
+        if (alarmAudio && isAlarmPlaying) {
+            try {
+                alarmAudio.pause();
+                alarmAudio.currentTime = 0;
+                isAlarmPlaying = false;
+                console.log('闹钟已停止');
+            } catch (e) {
+                console.error('停止闹钟失败:', e);
+            }
+        }
     }
 
     // 获取初判结果文本
@@ -984,6 +1317,9 @@
         // 添加样式
         GM_addStyle(STYLES);
 
+        // 预加载音频
+        preloadAlarmAudio();
+
         // 立即开始加载远程脚本
         loadRemoteScript();
 
@@ -1008,6 +1344,7 @@
 
         // 暴露开关状态获取方法
         window.getReminderStatus = () => GM_getValue(SWITCH_KEY, true);
+        window.getAlarmStatus = () => GM_getValue(ALARM_SWITCH_KEY, false);
 
         console.log('iLabel辅助工具初始化完成');
     }
