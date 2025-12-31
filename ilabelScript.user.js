@@ -43,7 +43,6 @@
     let alarmAudio = null;
     let isAlarmPlaying = false;
     let pushInterval = null;
-    let lastAlarmTime = 0; // 记录上次闹钟时间
 
     // ========== 样式定义 ==========
     const STYLES = `
@@ -519,9 +518,7 @@
         const mobileMapMatch = configStr.match(/const\s+auditorMobileMap\s*=\s*\(function\(\)\s*\{[\s\S]*?\}\)\(\);/);
         if (mobileMapMatch) {
             try {
-                // 直接执行这个函数来获取映射
-                const mapCode = mobileMapMatch[0].replace('const auditorMobileMap = ', '');
-                config.auditorMobileMap = new Function('return ' + mapCode + ';')();
+                config.auditorMobileMap = new Function('return ' + mobileMapMatch[0].trim() + ';')();
             } catch (e) {
                 console.error('解析手机号映射失败:', e);
                 // 从白名单生成映射
@@ -784,9 +781,7 @@
             basicInfo.auditRemark = auditInfo.auditRemark;
 
             currentLiveData = basicInfo;
-
-            // 直接处理结果，不等待弹窗
-            remoteFunctions(basicInfo, config, handleResultImmediately);
+            remoteFunctions(basicInfo, config, displayResult);
         } catch (e) {
             console.error('处理直播信息失败:', e);
         }
@@ -865,25 +860,19 @@
         }
     }
 
-    // 立即处理结果（不等待弹窗）
-    function handleResultImmediately(result) {
+    // 显示结果
+    function displayResult(result) {
         if (!result || !result.message) return;
 
         currentResultType = result.type;
 
-        // 黑名单不处理
+        // 黑名单不显示任何弹窗
         if (result.type === 'blacklist') {
-            console.log('审核人员在黑名单中，不处理');
+            console.log('审核人员在黑名单中，不显示弹窗');
             return;
         }
 
-        // 检查闹钟开关
-        if (GM_getValue(ALARM_SWITCH_KEY, false)) {
-            // 立即播放闹钟，不需要等待任何条件
-            playAlarmImmediately();
-        }
-
-        // 普通单只有在推送开关开启时才显示弹窗
+        // 普通单只有在推送开关开启时才显示
         if (result.type === 'normal') {
             if (!GM_getValue(SWITCH_KEY, true)) {
                 console.log('推送开关关闭，普通单不显示弹窗');
@@ -891,85 +880,8 @@
             }
         }
 
-        // 非普通单无论推送开关状态都显示弹窗
+        // 非普通单无论推送开关状态都显示
         createPopup(result);
-    }
-
-    // 立即播放闹钟
-    function playAlarmImmediately() {
-        try {
-            console.log('检测到直播数据，立即播放闹钟...');
-
-            // 防止频繁触发（2秒内不重复播放）
-            const now = Date.now();
-            if (now - lastAlarmTime < 2000) {
-                console.log('距离上次闹钟时间太短，跳过本次播放');
-                return;
-            }
-
-            lastAlarmTime = now;
-
-            if (!alarmAudio) {
-                console.warn('音频对象未初始化，尝试初始化...');
-                // 尝试重新初始化
-                alarmAudio = new Audio(ALARM_AUDIO_URL + '?t=' + Date.now());
-                alarmAudio.loop = true;
-                alarmAudio.volume = 0.4;
-            }
-
-            // 停止当前正在播放的闹钟
-            if (isAlarmPlaying) {
-                alarmAudio.pause();
-                alarmAudio.currentTime = 0;
-            }
-
-            // 检查音频是否已加载
-            if (alarmAudio.readyState < 2) { // 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
-                console.log('音频未就绪，状态:', alarmAudio.readyState);
-
-                // 重新设置音频源
-                alarmAudio.src = ALARM_AUDIO_URL + '?t=' + Date.now();
-                alarmAudio.load();
-
-                // 等待音频加载
-                alarmAudio.addEventListener('canplaythrough', function onCanPlay() {
-                    console.log('音频加载完成，开始播放');
-                    alarmAudio.removeEventListener('canplaythrough', onCanPlay);
-
-                    const playPromise = alarmAudio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(() => {
-                            isAlarmPlaying = true;
-                            console.log('闹钟开始播放');
-                        }).catch(error => {
-                            console.error('播放失败:', error);
-                            isAlarmPlaying = false;
-                        });
-                    }
-                });
-
-                alarmAudio.addEventListener('error', function(e) {
-                    console.error('音频加载错误:', e);
-                });
-
-            } else {
-                // 音频已就绪，直接播放
-                const playPromise = alarmAudio.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        isAlarmPlaying = true;
-                        console.log('闹钟开始播放');
-                    }).catch(error => {
-                        console.error('播放失败:', error);
-                        isAlarmPlaying = false;
-                    });
-                }
-            }
-
-        } catch (e) {
-            console.error('播放闹钟异常:', e);
-            isAlarmPlaying = false;
-        }
     }
 
     // 创建弹窗
@@ -985,6 +897,8 @@
             clearInterval(pushInterval);
             pushInterval = null;
         }
+
+        stopAlarm();
 
         // 设置颜色 - 只从远程配置获取，不设置默认值
         let color = null;
@@ -1150,6 +1064,12 @@
             const popupExists = !!document.getElementById('ilabel-alert-popup');
             const timeElapsed = Date.now() - lastPopupTime;
 
+            // 闹钟条件：闹钟开关开启且当前没有在响铃
+            if (GM_getValue(ALARM_SWITCH_KEY, false) && !isAlarmPlaying) {
+                // 开始播放闹钟
+                playAlarm();
+            }
+
             // 20秒后检查推送
             if (timeElapsed > 20000 && popupExists && currentLiveData && config) {
                 const auditorName = currentLiveData.auditor;
@@ -1189,6 +1109,91 @@
                 stopAlarm();
             }
         }, 1000);
+    }
+
+    // 播放闹钟声音
+    function playAlarm() {
+        try {
+            console.log('尝试播放闹钟...');
+
+            if (!alarmAudio) {
+                console.warn('音频对象未初始化');
+                // 尝试重新初始化
+                alarmAudio = new Audio(ALARM_AUDIO_URL + '?t=' + Date.now());
+                alarmAudio.loop = true;
+                alarmAudio.volume = 0.4;
+            }
+
+            // 检查音频是否已加载
+            if (alarmAudio.readyState < 2) { // 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
+                console.log('音频未就绪，状态:', alarmAudio.readyState);
+
+                // 重新设置音频源
+                alarmAudio.src = ALARM_AUDIO_URL + '?t=' + Date.now();
+                alarmAudio.load();
+
+                // 等待音频加载
+                alarmAudio.addEventListener('canplaythrough', function onCanPlay() {
+                    console.log('音频加载完成，开始播放');
+                    alarmAudio.removeEventListener('canplaythrough', onCanPlay);
+
+                    const playPromise = alarmAudio.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            isAlarmPlaying = true;
+                            console.log('闹钟开始播放');
+                        }).catch(error => {
+                            console.error('播放失败:', error);
+                            isAlarmPlaying = false;
+
+                            // 尝试用户交互后播放
+                            document.addEventListener('click', function tryPlayOnce() {
+                                document.removeEventListener('click', tryPlayOnce);
+                                alarmAudio.play().then(() => {
+                                    isAlarmPlaying = true;
+                                    console.log('用户交互后闹钟开始播放');
+                                }).catch(e => {
+                                    console.error('用户交互后播放仍然失败:', e);
+                                });
+                            });
+                        });
+                    }
+                });
+
+                alarmAudio.addEventListener('error', function(e) {
+                    console.error('音频加载错误:', e);
+                });
+
+            } else {
+                // 音频已就绪，直接播放
+                const playPromise = alarmAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        isAlarmPlaying = true;
+                        console.log('闹钟开始播放');
+                    }).catch(error => {
+                        console.error('播放失败:', error);
+                        isAlarmPlaying = false;
+
+                        // 自动恢复播放
+                        alarmAudio.currentTime = 0;
+                        setTimeout(() => {
+                            if (GM_getValue(ALARM_SWITCH_KEY, false) && !isAlarmPlaying) {
+                                alarmAudio.play().then(() => {
+                                    isAlarmPlaying = true;
+                                }).catch(e => {
+                                    console.error('重试播放失败:', e);
+                                });
+                            }
+                        }, 1000);
+                    });
+                }
+            }
+
+        } catch (e) {
+            console.error('播放闹钟异常:', e);
+            isAlarmPlaying = false;
+        }
     }
 
     // 停止闹钟
