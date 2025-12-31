@@ -111,24 +111,19 @@ function checkInfo(getInfoData, config, callback) {
     });
 }
 
-// 检查是否为预埋单
+// 检查是否为预埋单 - 修改：只检查送审时间和当前网络时间是否不在同一天
 function isPrefilledOrder(data) {
-    if (!data.streamStartTime || !data.audit_time) return false;
+    if (!data.audit_time) return false;
     
-    const streamDate = new Date(parseInt(data.streamStartTime) * 1000);
     const auditDate = new Date(parseInt(data.audit_time) * 1000);
     const now = new Date();
     
-    // 检查是否在同一天
-    const isSameDay = streamDate.getDate() === now.getDate() && 
-                     streamDate.getMonth() === now.getMonth() && 
-                     streamDate.getFullYear() === now.getFullYear();
+    // 检查送审时间和当前网络时间是否不在同一天
+    const isAuditNotToday = auditDate.getDate() !== now.getDate() || 
+                           auditDate.getMonth() !== now.getMonth() || 
+                           auditDate.getFullYear() !== now.getFullYear();
     
-    // 检查送审时间是否早于网络时间1小时
-    const oneHourEarly = new Date(now.getTime() - 60 * 60 * 1000);
-    const isAuditEarly = auditDate < oneHourEarly;
-    
-    return !isSameDay || isAuditEarly;
+    return isAuditNotToday;
 }
 
 // 检查是否豁免
