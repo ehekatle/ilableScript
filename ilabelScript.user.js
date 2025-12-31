@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
-// @version      2.4.6
+// @version      2.4.7
 // @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
@@ -43,6 +43,7 @@
     let alarmAudio = null;
     let isAlarmPlaying = false;
     let pushInterval = null;
+    let alarmTestTimeout = null;
 
     // ========== 样式定义 ==========
     const STYLES = `
@@ -129,40 +130,6 @@
             color: #666;
             white-space: nowrap;
             font-family: Arial, sans-serif;
-        }
-
-        .ilabel-status-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            display: none;
-        }
-
-        .ilabel-status-dot.loading {
-            display: block;
-            background: #1890ff;
-            animation: pulse 1.5s infinite;
-        }
-
-        .ilabel-status-dot.success {
-            display: block;
-            background: #52c41a;
-        }
-
-        .ilabel-status-dot.error {
-            display: block;
-            background: #f5222d;
-        }
-
-        .ilabel-status-dot.warning {
-            display: block;
-            background: #faad14;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.3); opacity: 0.7; }
-            100% { transform: scale(1); opacity: 1; }
         }
 
         /* 版本信息提示 - 黑色气泡 */
@@ -334,7 +301,6 @@
     function loadAudioFromNetwork() {
         console.log('从网络加载音频...');
 
-        // 使用GM_xmlhttpRequest获取音频数据
         GM_xmlhttpRequest({
             method: 'GET',
             url: ALARM_AUDIO_URL + '?t=' + Date.now(),
@@ -392,10 +358,64 @@
         });
     }
 
+    // 播放测试闹钟（7.6秒）
+    function playAlarmTest() {
+        console.log('开始闹钟测试播放...');
+
+        if (!alarmAudio) {
+            console.warn('音频对象未初始化，重新初始化...');
+            alarmAudio = new Audio(ALARM_AUDIO_URL + '?t=' + Date.now());
+            alarmAudio.loop = true;
+            alarmAudio.volume = 0.4;
+        }
+
+        // 重置音频
+        alarmAudio.currentTime = 0;
+        alarmAudio.loop = false; // 测试时不循环
+
+        // 播放音频
+        const playPromise = alarmAudio.play();
+
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                isAlarmPlaying = true;
+                console.log('测试闹钟开始播放');
+
+                // 自动停止
+                alarmTestTimeout = setTimeout(() => {
+                    stopAlarmTest();
+                    console.log('测试闹钟已停止');
+                }, 7600);
+
+            }).catch(error => {
+                console.error('测试闹钟播放失败:', error);
+                isAlarmPlaying = false;
+            });
+        }
+    }
+
+    // 停止测试闹钟
+    function stopAlarmTest() {
+        if (alarmTestTimeout) {
+            clearTimeout(alarmTestTimeout);
+            alarmTestTimeout = null;
+        }
+
+        if (alarmAudio && isAlarmPlaying) {
+            try {
+                alarmAudio.pause();
+                alarmAudio.currentTime = 0;
+                isAlarmPlaying = false;
+                console.log('测试闹钟已停止');
+            } catch (e) {
+                console.error('停止测试闹钟失败:', e);
+            }
+        }
+    }
+
     // 加载远程脚本
     function loadRemoteScript() {
         console.log('开始加载远程脚本...');
-        updateStatusDot('loading');
 
         GM_xmlhttpRequest({
             method: 'GET',
@@ -406,18 +426,15 @@
                         parseRemoteScript(response.responseText);
                     } catch (e) {
                         console.error('远程脚本解析失败:', e);
-                        updateStatusDot('error');
                         showError('远程脚本解析失败: ' + e.message);
                     }
                 } else {
                     console.error('远程脚本加载失败，状态码:', response.status);
-                    updateStatusDot('error');
                     showError('远程脚本加载失败，状态码: ' + response.status);
                 }
             },
             onerror: function(error) {
                 console.error('远程脚本加载网络错误:', error);
-                updateStatusDot('error');
                 showError('远程脚本加载网络错误');
             }
         });
@@ -431,7 +448,6 @@
 
         if (!remoteVersion) {
             console.error('未找到远程版本号');
-            updateStatusDot('error');
             showError('远程配置缺少版本号');
             return;
         }
@@ -439,8 +455,6 @@
         // 检查版本一致性
         if (remoteVersion !== LOCAL_VERSION) {
             console.warn(`版本不匹配: 本地=${LOCAL_VERSION}, 远程=${remoteVersion}`);
-            updateStatusDot('warning');
-            return;
         }
 
         // 解析配置
@@ -448,20 +462,17 @@
         if (configMatch) {
             const configStr = configMatch[1];
             config = {};
-
-            // 解析所有配置（只从远程库获取）
             parseConfigFromString(configStr);
 
             console.log('远程配置加载成功');
             loadRemoteFunctions(scriptContent);
         } else {
             console.error('未找到配置块');
-            updateStatusDot('error');
             showError('远程配置格式错误');
         }
     }
 
-    // 从字符串解析所有配置（只从远程库获取）
+    // 从字符串解析所有配置
     function parseConfigFromString(configStr) {
         // 解析主播白名单
         const anchorWhiteListMatch = configStr.match(/anchorWhiteList\s*=\s*"([^"]+)"/);
@@ -504,7 +515,6 @@
                 config.popupColors = new Function('return ' + popupColorsMatch[1].trim() + ';')();
             } catch (e) {
                 console.error('解析弹窗颜色配置失败:', e);
-                // 不使用默认颜色，让远程函数处理
             }
         }
 
@@ -521,11 +531,9 @@
                 config.auditorMobileMap = new Function('return ' + mobileMapMatch[0].trim() + ';')();
             } catch (e) {
                 console.error('解析手机号映射失败:', e);
-                // 从白名单生成映射
                 generateMobileMapFromWhiteList();
             }
         } else {
-            // 从白名单生成映射
             generateMobileMapFromWhiteList();
         }
 
@@ -559,16 +567,13 @@
                     return checkInfo(getInfoData, config, callback);
                 `);
                 console.log('远程函数创建成功');
-                updateStatusDot('success');
                 updateVersionTooltip();
             } catch (e) {
                 console.error('创建远程函数失败:', e);
-                updateStatusDot('error');
                 throw e;
             }
         } else {
             console.error('未找到功能函数块');
-            updateStatusDot('error');
             showError('远程功能函数格式错误');
         }
     }
@@ -634,12 +639,27 @@
         alarmSlider.className = 'ilabel-switch-slider';
 
         alarmCheckbox.addEventListener('change', function() {
-            GM_setValue(ALARM_SWITCH_KEY, this.checked);
-            console.log('闹钟提醒状态:', this.checked ? '开启' : '关闭');
+            const isChecked = this.checked;
+            GM_setValue(ALARM_SWITCH_KEY, isChecked);
+            console.log('闹钟提醒状态:', isChecked ? '开启' : '关闭');
 
-            // 如果关闭闹钟，停止所有闹钟
-            if (!this.checked) {
+            // 如果开启闹钟，播放测试音频
+            if (isChecked) {
+                // 自动打开推送开关
+                if (!pushCheckbox.checked) {
+                    pushCheckbox.checked = true;
+                    GM_setValue(SWITCH_KEY, true);
+                    updateVersionTooltip();
+                    console.log('闹钟开启，自动打开推送开关');
+                }
+
+                // 播放测试闹钟
+                setTimeout(() => {
+                    playAlarmTest();
+                }, 100);
+            } else {
                 stopAlarm();
+                stopAlarmTest();
             }
         });
 
@@ -651,11 +671,6 @@
         // 组装
         container.appendChild(pushSwitchRow);
         container.appendChild(alarmSwitchRow);
-
-        const statusDot = document.createElement('div');
-        statusDot.className = 'ilabel-status-dot loading';
-        statusDot.id = 'ilabel-status-dot';
-        container.appendChild(statusDot);
 
         const versionTooltip = document.createElement('div');
         versionTooltip.className = 'ilabel-version-tooltip';
@@ -690,21 +705,6 @@
         const pushStatus = isPushEnabled ? '推送开' : '推送关';
         const alarmStatus = isAlarmEnabled ? '闹钟开' : '闹钟关';
         tooltip.textContent = `${versionStatus}|${pushStatus}|${alarmStatus}`;
-    }
-
-    // 更新状态点
-    function updateStatusDot(status) {
-        const statusDot = document.getElementById('ilabel-status-dot');
-        if (statusDot) {
-            statusDot.className = 'ilabel-status-dot ' + status;
-            if (status === 'success') {
-                setTimeout(() => {
-                    if (statusDot && statusDot.className.includes('success')) {
-                        statusDot.style.display = 'none';
-                    }
-                }, 2000);
-            }
-        }
     }
 
     // 监听网络请求
@@ -899,13 +899,13 @@
         }
 
         stopAlarm();
+        stopAlarmTest();
 
-        // 设置颜色 - 只从远程配置获取，不设置默认值
+        // 设置颜色
         let color = null;
         if (config && config.popupColors && config.popupColors[result.type]) {
             color = config.popupColors[result.type];
         } else {
-            // 如果没有配置，使用简单的默认样式
             color = { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' };
         }
 
@@ -1031,7 +1031,6 @@
             popupConfirmed = true;
             lastPopupTime = null;
 
-            // 清理所有定时器
             if (popupCheckInterval) {
                 clearInterval(popupCheckInterval);
                 popupCheckInterval = null;
@@ -1042,6 +1041,7 @@
             }
 
             stopAlarm();
+            stopAlarmTest();
         };
 
         // 组装弹窗
@@ -1066,7 +1066,6 @@
 
             // 闹钟条件：闹钟开关开启且当前没有在响铃
             if (GM_getValue(ALARM_SWITCH_KEY, false) && !isAlarmPlaying) {
-                // 开始播放闹钟
                 playAlarm();
             }
 
@@ -1080,10 +1079,8 @@
 
                 // 推送条件：在白名单中且推送开关开启
                 if (isInWhiteList && GM_getValue(SWITCH_KEY, true)) {
-                    // 第一次推送
                     if (!pushInterval) {
                         sendWeChatNotification(auditorName);
-                        // 设置每20秒推送一次
                         pushInterval = setInterval(() => {
                             if (popupExists && GM_getValue(SWITCH_KEY, true)) {
                                 sendWeChatNotification(auditorName);
@@ -1107,6 +1104,7 @@
                     pushInterval = null;
                 }
                 stopAlarm();
+                stopAlarmTest();
             }
         }, 1000);
     }
@@ -1114,80 +1112,28 @@
     // 播放闹钟声音
     function playAlarm() {
         try {
-            console.log('尝试播放闹钟...');
+            console.log('开始播放闹钟...');
 
             if (!alarmAudio) {
                 console.warn('音频对象未初始化');
-                // 尝试重新初始化
                 alarmAudio = new Audio(ALARM_AUDIO_URL + '?t=' + Date.now());
                 alarmAudio.loop = true;
                 alarmAudio.volume = 0.4;
             }
 
-            // 检查音频是否已加载
-            if (alarmAudio.readyState < 2) { // 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
-                console.log('音频未就绪，状态:', alarmAudio.readyState);
+            alarmAudio.loop = true;
+            alarmAudio.currentTime = 0;
 
-                // 重新设置音频源
-                alarmAudio.src = ALARM_AUDIO_URL + '?t=' + Date.now();
-                alarmAudio.load();
+            const playPromise = alarmAudio.play();
 
-                // 等待音频加载
-                alarmAudio.addEventListener('canplaythrough', function onCanPlay() {
-                    console.log('音频加载完成，开始播放');
-                    alarmAudio.removeEventListener('canplaythrough', onCanPlay);
-
-                    const playPromise = alarmAudio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(() => {
-                            isAlarmPlaying = true;
-                            console.log('闹钟开始播放');
-                        }).catch(error => {
-                            console.error('播放失败:', error);
-                            isAlarmPlaying = false;
-
-                            // 尝试用户交互后播放
-                            document.addEventListener('click', function tryPlayOnce() {
-                                document.removeEventListener('click', tryPlayOnce);
-                                alarmAudio.play().then(() => {
-                                    isAlarmPlaying = true;
-                                    console.log('用户交互后闹钟开始播放');
-                                }).catch(e => {
-                                    console.error('用户交互后播放仍然失败:', e);
-                                });
-                            });
-                        });
-                    }
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isAlarmPlaying = true;
+                    console.log('闹钟开始播放');
+                }).catch(error => {
+                    console.error('闹钟播放失败:', error);
+                    isAlarmPlaying = false;
                 });
-
-                alarmAudio.addEventListener('error', function(e) {
-                    console.error('音频加载错误:', e);
-                });
-
-            } else {
-                // 音频已就绪，直接播放
-                const playPromise = alarmAudio.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        isAlarmPlaying = true;
-                        console.log('闹钟开始播放');
-                    }).catch(error => {
-                        console.error('播放失败:', error);
-                        isAlarmPlaying = false;
-
-                        // 自动恢复播放
-                        alarmAudio.currentTime = 0;
-                        setTimeout(() => {
-                            if (GM_getValue(ALARM_SWITCH_KEY, false) && !isAlarmPlaying) {
-                                alarmAudio.play().then(() => {
-                                    isAlarmPlaying = true;
-                                }).catch(e => {
-                                    console.error('重试播放失败:', e);
-                                });
-                            }
-                        }, 1000);
-                    });
-                }
             }
 
         } catch (e) {
@@ -1238,11 +1184,9 @@
             return;
         }
 
-        // 获取审核人员手机号
         const mentionedMobile = config.auditorMobileMap &&
                                 config.auditorMobileMap[auditorName];
 
-        // 格式化推送内容：时间 + 初判结果 + 人员
         const timeStr = formatTime24();
         const judgmentText = getInitialJudgmentText();
         const content = `${timeStr} ${judgmentText}单未确认`;
@@ -1254,7 +1198,6 @@
             }
         };
 
-        // 如果有手机号，添加@功能
         if (mentionedMobile) {
             data.text.mentioned_mobile_list = [mentionedMobile];
             console.log(`将@审核人员: ${auditorName} (手机号: ${mentionedMobile})`);
@@ -1314,16 +1257,10 @@
     function init() {
         console.log(`iLabel直播审核辅助工具 ${LOCAL_VERSION} 初始化...`);
 
-        // 添加样式
         GM_addStyle(STYLES);
-
-        // 预加载音频
         preloadAlarmAudio();
-
-        // 立即开始加载远程脚本
         loadRemoteScript();
 
-        // 等待DOM加载后添加开关按钮
         const addSwitch = () => {
             const switchBtn = createSwitchButton();
             document.body.appendChild(switchBtn);
@@ -1336,19 +1273,14 @@
             addSwitch();
         }
 
-        // 设置网络监听
         setupRequestInterception();
-
-        // 监听页面变化
         observePageChanges();
 
-        // 暴露开关状态获取方法
         window.getReminderStatus = () => GM_getValue(SWITCH_KEY, true);
         window.getAlarmStatus = () => GM_getValue(ALARM_SWITCH_KEY, false);
 
         console.log('iLabel辅助工具初始化完成');
     }
 
-    // 立即开始初始化
     init();
 })();
