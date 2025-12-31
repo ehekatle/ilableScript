@@ -1,7 +1,10 @@
-/* VERSION: 2.4.5 */
+/* VERSION: 2.4.6 */
 /* CONFIG START */
-// 主播白名单（空格分隔）- 修改为包含关键词匹配
-const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博".split(' ');
+// 昵称白名单
+const anchorWhiteList = "百年对语 东南军迷俱乐部 广东新闻广描 广东新闻频道 广东移动频道 湖南国际瑰宝雅集 湖南国际频道文创甄选 湖南国际珍宝收藏 琳琅瑰宝雅集 央博匠心 雨家饰品 雨家首饰 豫见新财富 BRTV大家收藏 BRTV首都经济报道 好物珍宝 央博典藏 央博非遗珍宝 央博好物 央博木作 央博 周大生 CHOW TAISENG".split(' ');
+
+// 认证白名单
+const enterpriseMediaWhiteList = "事业媒体 深圳周大福在线传媒有限公司 上海老凤祥旅游产品有限公司 上海老凤祥有限公司 周六福电子商务有限公司 周大生珠宝股份有限公司 周大生 CHOW TAISENG 六福营销策划(重庆)有限公司 四川宝瑞雅珠宝有限公司 深圳意新珠宝有限公司 北京纳福国潮珠宝有限责任公司 四川萃玥翡传媒有限公司 四会市伍间科技有限公司 上海老庙黄金有限公司 老铺黄金股份有限公司 故宫文化创意产业有限公司".split(' ');
 
 // 处罚检查关键词（空格分隔）
 const penaltyKeywords = "金包 金重量 金含量 金镯子 金项链 金子这么便宜 缅 曼德勒 越南 老仓库".split(' ');
@@ -72,7 +75,7 @@ function checkInfo(getInfoData, config, callback) {
         return;
     }
 
-    // 3. 豁免检查 - 新增主播认证检查
+    // 3. 豁免检查 - 修改：增加主播认证检查，白名单改为包含匹配
     if (isExempted(getInfoData, config)) {
         callback({
             type: 'exempted',
@@ -128,23 +131,28 @@ function isPrefilledOrder(data) {
     return !isSameDay || isAuditEarly;
 }
 
-// 检查是否豁免 - 修改：增加主播认证检查，白名单改为包含匹配
+// 检查是否豁免
 function isExempted(data, config) {
     // 检查主播昵称是否包含白名单关键词
     if (data.nickname && config.anchorWhiteList) {
         for (let i = 0; i < config.anchorWhiteList.length; i++) {
             const keyword = config.anchorWhiteList[i];
             if (keyword && data.nickname.includes(keyword)) {
-                console.log(`主播昵称 "${data.nickname}" 包含白名单关键词 "${keyword}"`);
+                console.log(`主播昵称包含白名单关键词 "${keyword}"`);
                 return true;
             }
         }
     }
     
-    // 检查主播认证是否包含"事业媒体"
-    if (data.authStatus && data.authStatus.includes('事业媒体')) {
-        console.log(`主播认证包含"事业媒体": ${data.authStatus}`);
-        return true;
+    // 检查主播认证是否包含白名单关键词
+    if (data.authStatus && config.enterpriseMediaWhiteList) {
+        for (let i = 0; i < config.enterpriseMediaWhiteList.length; i++) {
+            const keyword = config.enterpriseMediaWhiteList[i];
+            if (keyword && data.authStatus.includes(keyword)) {
+                console.log(`主播认证包含白名单关键词 "${keyword}"`);
+                return true;
+            }
+        }
     }
     
     return false;
@@ -208,4 +216,3 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
-
