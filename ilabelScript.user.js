@@ -567,17 +567,7 @@
         }
 
         // 解析手机号映射
-        const mobileMapMatch = configStr.match(/const\s+auditorMobileMap\s*=\s*\(function\(\)\s*\{[\s\S]*?\}\)\(\);/);
-        if (mobileMapMatch) {
-            try {
-                config.auditorMobileMap = new Function('return ' + mobileMapMatch[0].trim() + ';')();
-            } catch (e) {
-                console.error('解析手机号映射失败:', e);
-                generateMobileMapFromWhiteList();
-            }
-        } else {
-            generateMobileMapFromWhiteList();
-        }
+        generateMobileMapFromWhiteList();
 
         // 解析事业媒体白名单
         const enterpriseMediaListMatch = configStr.match(/enterpriseMediaWhiteList\s*=\s*"([^"]+)"/);
@@ -1114,7 +1104,9 @@
             const timeElapsed = Date.now() - lastPopupTime;
 
             // 闹钟条件：闹钟开关开启且当前没有在响铃
-            if (GM_getValue(ALARM_SWITCH_KEY, false) && !isAlarmPlaying) {
+            const alarmCheckbox = document.querySelector('.alarm-switch input[type="checkbox"]');
+            const isAlarmEnabled = alarmCheckbox ? alarmCheckbox.checked : false;
+            if (isAlarmEnabled && !isAlarmPlaying) {
                 playAlarm();
             }
 
