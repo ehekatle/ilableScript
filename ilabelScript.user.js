@@ -5,10 +5,10 @@
 // @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
-// @source       https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
+// @source       https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.user.js
 // @supportURL   https://github.com/ehekatle/ilableScript/issues
-// @updateURL    https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.meta.js
-// @downloadURL  https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilabelScript.user.js
+// @updateURL    https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.meta.js
+// @downloadURL  https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.user.js
 // @match        https://ilabel.weixin.qq.com/mixed-task/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=weixin.qq.com
 // @grant        GM_xmlhttpRequest
@@ -25,7 +25,6 @@
 
     // 全局变量
     const SWITCH_KEY = 'ilabel_reminder_enabled';
-    const ALARM_SWITCH_KEY = 'ilabel_alarm_enabled';
     const REMOTE_SCRIPT_URL = 'https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.js';
     const ALARM_AUDIO_URL = 'https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/music.mp3';
 
@@ -50,16 +49,16 @@
         .ilabel-switch-container {
             position: fixed;
             bottom: 0px;
-            left: 60px;
+            left: 0px;
             z-index: 999999;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            padding: 8px;
+            background: transparent;
+            border-radius: 0px;
+            box-shadow: 0 0px 0px rgba(0,0,0,0.2);
+            padding: 0px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 8px;
+            gap: 3px;
             min-width: auto;
             transition: all 0.3s ease;
         }
@@ -76,20 +75,20 @@
             justify-content: space-between;
         }
 
-        .ilabel-switch {
+        .push-switch {
             position: relative;
             display: inline-block;
             width: 40px;
             height: 20px;
         }
 
-        .ilabel-switch input {
+        .push-switch input {
             opacity: 0;
             width: 0;
             height: 0;
         }
 
-        .ilabel-switch-slider {
+        .push-switch-slider {
             position: absolute;
             cursor: pointer;
             top: 0;
@@ -101,7 +100,7 @@
             border-radius: 20px;
         }
 
-        .ilabel-switch-slider:before {
+        .push-switch-slider:before {
             position: absolute;
             content: "";
             height: 14px;
@@ -113,16 +112,58 @@
             border-radius: 50%;
         }
 
-        input:checked + .ilabel-switch-slider {
+        .push-switch input:checked + .push-switch-slider {
             background-color: #07c160;
         }
 
-        input:checked + .ilabel-switch-slider:before {
+        .push-switch input:checked + .push-switch-slider:before {
             transform: translateX(20px);
         }
 
-        .ilabel-switch.blue input:checked + .ilabel-switch-slider {
+        /* alarm-switch 样式 */
+        .alarm-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .alarm-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .alarm-switch-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .alarm-switch-slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        .alarm-switch input:checked + .alarm-switch-slider {
             background-color: #2196f3;
+        }
+
+        .alarm-switch input:checked + .alarm-switch-slider:before {
+            transform: translateX(20px);
         }
 
         .ilabel-switch-label {
@@ -132,17 +173,17 @@
             font-family: Arial, sans-serif;
         }
 
-        /* 版本信息提示 - 黑色气泡 */
+        /* 状态提示 */
         .ilabel-version-tooltip {
             position: absolute;
             bottom: 100%;
             left: 50%;
             transform: translateX(-50%);
-            background: #333;
+            background: transparent;
             color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 14px;
+            padding: 6px 10px;  /* 减小内边距 */
+            border-radius: 4px;  /* 减小圆角 */
+            font-size: 12px;     /* 减小字体大小 */
             font-weight: 500;
             white-space: nowrap;
             opacity: 0;
@@ -150,10 +191,11 @@
             transition: all 0.3s ease;
             z-index: 1000000;
             pointer-events: none;
-            min-width: 120px;
-            text-align: center;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-            margin-bottom: 10px;
+            min-width: 55px;     /* 设置最小宽度 */
+            max-width: 55px;     /* 设置最大宽度 */
+            text-align: center;  /* 文字居中 */
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            margin-bottom: 8px;
         }
 
         .ilabel-version-tooltip:after {
@@ -162,8 +204,8 @@
             top: 100%;
             left: 50%;
             transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #333;
+            border: 4px solid transparent;  /* 减小箭头大小 */
+            border-top-color: transparent;
         }
 
         .ilabel-switch-container:hover .ilabel-version-tooltip {
@@ -589,18 +631,17 @@
 
         const pushLabel = document.createElement('span');
         pushLabel.className = 'ilabel-switch-label';
-        pushLabel.textContent = '推送';
         pushLabel.style.color = '#07c160';
 
         const pushSwitch = document.createElement('label');
-        pushSwitch.className = 'ilabel-switch';
+        pushSwitch.className = 'push-switch';
 
         const pushCheckbox = document.createElement('input');
         pushCheckbox.type = 'checkbox';
         pushCheckbox.checked = GM_getValue(SWITCH_KEY, true);
 
         const pushSlider = document.createElement('span');
-        pushSlider.className = 'ilabel-switch-slider';
+        pushSlider.className = 'push-switch-slider';
 
         pushCheckbox.addEventListener('change', function() {
             GM_setValue(SWITCH_KEY, this.checked);
@@ -611,6 +652,18 @@
             if (!this.checked && pushInterval) {
                 clearInterval(pushInterval);
                 pushInterval = null;
+            }
+
+            // 如果关闭推送，同时关闭闹钟开关
+            if (!this.checked) {
+                const alarmCheckbox = document.querySelector('.alarm-switch input[type="checkbox"]');
+                if (alarmCheckbox && alarmCheckbox.checked) {
+                    alarmCheckbox.checked = false;
+                    stopAlarm();
+                    stopAlarmTest();
+                    updateVersionTooltip(); // 更新状态提示
+                    console.log('推送关闭，自动关闭闹钟开关');
+                }
             }
         });
 
@@ -625,23 +678,25 @@
 
         const alarmLabel = document.createElement('span');
         alarmLabel.className = 'ilabel-switch-label';
-        alarmLabel.textContent = '闹钟';
         alarmLabel.style.color = '#2196f3';
 
         const alarmSwitch = document.createElement('label');
-        alarmSwitch.className = 'ilabel-switch blue';
+        alarmSwitch.className = 'alarm-switch blue';
 
         const alarmCheckbox = document.createElement('input');
         alarmCheckbox.type = 'checkbox';
-        alarmCheckbox.checked = GM_getValue(ALARM_SWITCH_KEY, false);
+        // 每次加载都默认关闭，不读取保存的状态
+        alarmCheckbox.checked = false;
 
         const alarmSlider = document.createElement('span');
-        alarmSlider.className = 'ilabel-switch-slider';
+        alarmSlider.className = 'alarm-switch-slider';
 
         alarmCheckbox.addEventListener('change', function() {
             const isChecked = this.checked;
-            GM_setValue(ALARM_SWITCH_KEY, isChecked);
             console.log('闹钟提醒状态:', isChecked ? '开启' : '关闭');
+
+            // 更新状态提示
+            updateVersionTooltip();
 
             // 如果开启闹钟，播放测试音频
             if (isChecked) {
@@ -649,7 +704,7 @@
                 if (!pushCheckbox.checked) {
                     pushCheckbox.checked = true;
                     GM_setValue(SWITCH_KEY, true);
-                    updateVersionTooltip();
+                    updateVersionTooltip(); // 再次更新，因为推送状态也变了
                     console.log('闹钟开启，自动打开推送开关');
                 }
 
@@ -683,28 +738,22 @@
         return container;
     }
 
-    // 更新黑色气泡提示
+    // 更新提示
     function updateVersionTooltip() {
         const tooltip = document.getElementById('ilabel-version-tooltip');
         if (!tooltip) return;
 
-        const pushCheckbox = document.querySelector('.ilabel-switch:not(.blue) input[type="checkbox"]');
-        const alarmCheckbox = document.querySelector('.ilabel-switch.blue input[type="checkbox"]');
-        const isPushEnabled = pushCheckbox ? pushCheckbox.checked : false;
-        const isAlarmEnabled = alarmCheckbox ? alarmCheckbox.checked : false;
+        const pushCheckbox = document.querySelector('.push-switch input[type="checkbox"]');
+        const alarmCheckbox = document.querySelector('.alarm-switch input[type="checkbox"]');
 
-        let versionStatus = '';
-        if (!remoteVersion) {
-            versionStatus = '未加载';
-        } else if (remoteVersion === LOCAL_VERSION) {
-            versionStatus = '版本一致';
-        } else {
-            versionStatus = '版本不同';
-        }
+        // 推送状态从存储获取
+        const isPushEnabled = GM_getValue(SWITCH_KEY, true);
+        // 闹钟状态直接从checkbox获取
+        const isAlarmEnabled = alarmCheckbox ? alarmCheckbox.checked : false;
 
         const pushStatus = isPushEnabled ? '推送开' : '推送关';
         const alarmStatus = isAlarmEnabled ? '闹钟开' : '闹钟关';
-        tooltip.textContent = `${versionStatus}|${pushStatus}|${alarmStatus}`;
+        tooltip.innerHTML = `${LOCAL_VERSION}<br>${pushStatus}<br>${alarmStatus}`;
     }
 
     // 监听网络请求
@@ -1277,7 +1326,10 @@
         observePageChanges();
 
         window.getReminderStatus = () => GM_getValue(SWITCH_KEY, true);
-        window.getAlarmStatus = () => GM_getValue(ALARM_SWITCH_KEY, false);
+        window.getAlarmStatus = () => {
+            const alarmCheckbox = document.querySelector('.alarm-switch input[type="checkbox"]');
+            return alarmCheckbox ? alarmCheckbox.checked : false;
+        };
 
         console.log('iLabel辅助工具初始化完成');
     }
