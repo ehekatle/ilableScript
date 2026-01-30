@@ -9,7 +9,7 @@
 // @supportURL   https://github.com/ehekatle/ilableScript/issues
 // @updateURL    https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.meta.js
 // @downloadURL  https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.user.js
-// @match        https://ilabel.weixin.qq.com/mixed-task/*
+// @match        https://ilabel.weixin.qq.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=weixin.qq.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
