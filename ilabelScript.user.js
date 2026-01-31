@@ -2,7 +2,7 @@
 // @name         iLabel直播审核辅助
 // @namespace    https://github.com/ehekatle/ilableScript
 // @version      2.4.7
-// @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能
+// @description  预埋、豁免、直播信息违规、超时提示功能，集成推送功能和操作日志提取
 // @author       ehekatle
 // @homepage     https://github.com/ehekatle/ilableScript
 // @source       https://raw.githubusercontent.com/ehekatle/ilableScript/main/ilableScript.user.js
@@ -43,6 +43,7 @@
     let isAlarmPlaying = false;
     let pushInterval = null;
     let alarmTestTimeout = null;
+    let pendingAuditData = null; // 存储待推送的审核数据
 
     // ========== 样式定义 ==========
     const STYLES = `
@@ -746,24 +747,39 @@
         tooltip.innerHTML = `${LOCAL_VERSION}<br>${pushStatus}<br>${alarmStatus}`;
     }
 
-    // 监听网络请求
+    // 监听网络请求（包含第二个脚本的功能）
     function setupRequestInterception() {
         const originalFetch = window.fetch;
         if (originalFetch) {
             window.fetch = function(...args) {
                 const url = args[0];
-                if (typeof url === 'string' && url.includes('get_live_info_batch')) {
-                    const fetchPromise = originalFetch.apply(this, args);
-                    fetchPromise.then(response => {
-                        if (response.ok) {
-                            response.clone().json().then(data => {
-                                if (data.ret === 0 && data.liveInfoList?.length > 0) {
-                                    processLiveInfo(data.liveInfoList[0]);
-                                }
-                            }).catch(() => {});
+                if (typeof url === 'string') {
+                    // 监听直播信息请求
+                    if (url.includes('get_live_info_batch')) {
+                        const fetchPromise = originalFetch.apply(this, args);
+                        fetchPromise.then(response => {
+                            if (response.ok) {
+                                response.clone().json().then(data => {
+                                    if (data.ret === 0 && data.liveInfoList?.length > 0) {
+                                        processLiveInfo(data.liveInfoList[0]);
+                                    }
+                                }).catch(() => {});
+                            }
+                        }).catch(() => {});
+                        return fetchPromise;
+                    }
+                    // 监听审核提交请求
+                    else if (url.includes('/api/answers')) {
+                        const body = args[1];
+                        if (body && typeof body === 'string' && body.trim()) {
+                            try {
+                                processAuditData(body);
+                            } catch (e) {
+                                // 静默处理错误
+                            }
                         }
-                    }).catch(() => {});
-                    return fetchPromise;
+                        return originalFetch.apply(this, args);
+                    }
                 }
                 return originalFetch.apply(this, args);
             };
@@ -773,17 +789,20 @@
         const originalSend = XMLHttpRequest.prototype.send;
 
         XMLHttpRequest.prototype.open = function(method, url) {
+            this._method = method.toUpperCase();
             this._url = url;
-            this._method = method;
             return originalOpen.apply(this, arguments);
         };
 
         XMLHttpRequest.prototype.send = function(body) {
-            if (this._url && this._url.includes('get_live_info_batch')) {
-                this.addEventListener('load', () => {
-                    if (this.status === 200) {
+            const xhr = this;
+
+            // 监听直播信息请求
+            if (xhr._url && xhr._url.includes('get_live_info_batch')) {
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
                         try {
-                            const data = JSON.parse(this.responseText);
+                            const data = JSON.parse(xhr.responseText);
                             if (data.ret === 0 && data.liveInfoList?.length > 0) {
                                 processLiveInfo(data.liveInfoList[0]);
                             }
@@ -791,7 +810,18 @@
                     }
                 });
             }
-            return originalSend.apply(this, arguments);
+            // 监听审核提交请求
+            else if (xhr._method === 'POST' && xhr._url && xhr._url.includes('/api/answers')) {
+                if (body) {
+                    try {
+                        processAuditData(body);
+                    } catch (error) {
+                        // 静默处理错误
+                    }
+                }
+            }
+
+            return originalSend.call(this, body);
         };
     }
 
@@ -824,6 +854,119 @@
         } catch (e) {
             console.error('处理直播信息失败:', e);
         }
+    }
+
+    // 处理审核提交数据
+    function processAuditData(requestBody) {
+        try {
+            const parsedData = typeof requestBody === 'string'
+                ? JSON.parse(requestBody)
+                : requestBody;
+
+            if (!parsedData.results) return;
+
+            Object.values(parsedData.results).forEach(result => {
+                if (!result) return;
+
+                // 提取task_id和liveId
+                const taskId = result.task_id || '';
+                const liveId = result.live_id || '';
+
+                // 提取操作人（获取-后的文字）
+                let operator = '未知操作人';
+                if (result.oper_name && result.oper_name.includes('-')) {
+                    operator = result.oper_name.split('-').pop().trim();
+                } else if (result.oper_name) {
+                    operator = result.oper_name.trim();
+                }
+
+                // 检查punish_keyword和remark
+                let conclusion = '不处罚';
+                let punishKeyword = null;
+                let remark = null;
+
+                if (result.finder_object && Array.isArray(result.finder_object)) {
+                    for (const item of result.finder_object) {
+                        if (item.ext_info && item.ext_info.punish_keyword) {
+                            punishKeyword = item.ext_info.punish_keyword;
+                            remark = item.remark || null;
+                            break;
+                        }
+                    }
+                }
+
+                // 构建结论
+                if (punishKeyword) {
+                    conclusion = remark ? `${punishKeyword}（${remark}）` : punishKeyword;
+                }
+
+                // 存储待推送的数据
+                pendingAuditData = {
+                    task_id: taskId,
+                    live_id: liveId,
+                    conclusion: conclusion,
+                    operator: operator
+                };
+
+                // 输出到控制台
+                console.log(`task_id：${taskId}`);
+                console.log(`live_id：${taskId}`);
+                console.log(`结论：${conclusion}`);
+                console.log(`操作人：${operator}`);
+
+                // 发送企业微信推送
+                sendAuditResultToWeChat(pendingAuditData);
+            });
+
+        } catch (error) {
+            // 静默处理解析错误
+            console.error('解析审核数据失败:', error);
+        }
+    }
+
+    // 发送审核结果到企业微信
+    function sendAuditResultToWeChat(auditData) {
+        if (!config?.pushUrl) {
+            console.error('推送地址未配置');
+            return;
+        }
+
+        if (!GM_getValue(SWITCH_KEY, true)) {
+            console.log('推送开关关闭，不发送审核结果推送');
+            return;
+        }
+
+        const timeStr = formatTime24();
+        const content = `审核提交记录\n时间: ${timeStr}\ntask_id: ${auditData.task_id}\nlive_id: ${auditData.live_id}\n结论: ${auditData.conclusion}\n操作人: ${auditData.operator}`;
+
+        const data = {
+            msgtype: "text",
+            text: {
+                content: content
+            }
+        };
+
+        console.log('发送审核结果到企业微信:', data);
+
+        GM_xmlhttpRequest({
+            method: 'POST',
+            url: config.pushUrl,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify(data),
+            timeout: 5000,
+            onload: function(response) {
+                if (response.status === 200) {
+                    console.log('审核结果推送成功');
+                } else {
+                    console.error('审核结果推送失败:', response.status, response.responseText);
+                }
+            },
+            onerror: function(error) {
+                console.error('审核结果推送错误:', error);
+            }
+        });
     }
 
     // 获取审核人员信息
@@ -1218,7 +1361,7 @@
         return `${hours}:${minutes}:${seconds}`;
     }
 
-    // 发送企业微信通知
+    // 发送企业微信通知（弹窗超时提醒）
     function sendWeChatNotification(auditorName) {
         if (!config?.pushUrl) {
             console.error('推送地址未配置');
