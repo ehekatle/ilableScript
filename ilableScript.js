@@ -28,7 +28,7 @@ const auditorWhiteList = [
     { name: "杨杰", mobile: "15730023825" },
     { name: "林志洋", mobile: "13640598040" },
     { name: "游丰宁", mobile: "15723250832" },
-    { name: "谢宇欣", mobile: "15313554202" },
+    { name: "谢宇欣", mobile: "15213554202" },
     { name: "曾燕", mobile: "19922974289" },
     { name: "桂雪莲", mobile: "18166360194" },
     { name: "王成林", mobile: "15202372642" }
@@ -225,6 +225,7 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
 
 
