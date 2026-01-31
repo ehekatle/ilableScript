@@ -21,7 +21,17 @@ const auditorWhiteList = [
     { name: "徐蝶", mobile: "17623729348" },
     { name: "冉燕", mobile: "18996493587" },
     { name: "胡洪", mobile: "15086920634" },
-    { name: "李美林", mobile: "17782380032" }
+    { name: "李美林", mobile: "17782380032" },
+    { name: "罗灵", mobile: "19122166093" },
+    { name: "张鸿扬", mobile: "13320242298" },
+    { name: "谢芬", mobile: "13648471727" },
+    { name: "杨杰", mobile: "15730023825" },
+    { name: "林志洋", mobile: "13640598040" },
+    { name: "游丰宁", mobile: "15723250832" },
+    { name: "谢宇欣", mobile: "15313554202" },
+    { name: "曾燕", mobile: "19922974289" },
+    { name: "桂雪莲", mobile: "18166360194" },
+    { name: "王成林", mobile: "15202372642" }
 ];
 
 // 审核黑名单
@@ -215,6 +225,7 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
 
 
