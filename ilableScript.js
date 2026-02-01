@@ -31,7 +31,9 @@ const auditorWhiteList = [
     { name: "谢宇欣", mobile: "15213554202" },
     { name: "曾燕", mobile: "19922974289" },
     { name: "桂雪莲", mobile: "18166360194" },
-    { name: "王成林", mobile: "15202372642" }
+    { name: "王成林", mobile: "15202372642" },
+    { name: "涂素榕", mobile: "16602309860" },
+    { name: "田一材", mobile: "18883670307" }
 ];
 
 // 审核黑名单
@@ -225,6 +227,7 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
 
 
