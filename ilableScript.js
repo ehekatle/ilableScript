@@ -57,7 +57,7 @@ const popupColors = {
     prefilled: { bg: '#ffebee', border: '#f44336', text: '#c62828' },      // 预埋单 - 红色
     exempted: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },       // 豁免单 - 绿色
     review: { bg: '#e3f2fd', border: '#2196f3', text: '#1565c0' },         // 复核单 - 蓝色
-    targeted: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },       // 点杀单 - 橙色
+    targeted: { bg: '#000000', border: '#000000', text: '#ffffff' },       // 点杀单 - 黑色
     penalty: { bg: '#fff3e0', border: '#ff9800', text: '#ef6c00' },        // 违规单 - 黄色
     normal: { bg: '#f5f5f5', border: '#9e9e9e', text: '#424242' }          // 普通单 - 白色
 };
@@ -228,6 +228,7 @@ function checkPenalty(data, config) {
     
     return { found: false };
 }
+
 
 
 
