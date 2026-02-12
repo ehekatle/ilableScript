@@ -1208,7 +1208,8 @@
         confirmBtn.style.background = color.border;
         confirmBtn.style.color = 'white';
 
-        confirmBtn.onclick = () => {
+        // 确认按钮点击处理函数
+        const confirmHandler = function() {
             popup.remove();
             popupConfirmed = true;
             lastPopupTime = null;
@@ -1224,7 +1225,24 @@
 
             stopAlarm();
             stopAlarmTest();
+
+            // 移除键盘事件监听
+            document.removeEventListener('keydown', keydownHandler);
         };
+
+        confirmBtn.onclick = confirmHandler;
+
+        // 键盘事件处理函数
+        const keydownHandler = function(e) {
+            // 按下空格键且弹窗存在
+            if (e.code === 'Space' && document.getElementById('ilabel-alert-popup')) {
+                e.preventDefault(); // 防止页面滚动
+                confirmHandler(); // 执行确认操作
+            }
+        };
+
+        // 添加键盘事件监听
+        document.addEventListener('keydown', keydownHandler);
 
         // 组装弹窗
         buttonContainer.appendChild(copyBtn);
