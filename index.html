@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>每日减重 · 显示明日目标</title>
+    <title>每日减重 · 稳定版</title>
     <!-- Chart.js 轻量绘图 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -30,7 +30,6 @@
             overflow: hidden;
             padding: 24px 20px 30px;
         }
-        /* 顶部目标区域 */
         .target-section {
             background: linear-gradient(145deg, #2b3a4a, #1d2a36);
             border-radius: 28px;
@@ -79,7 +78,6 @@
             font-size: 15px;
             opacity: 0.9;
         }
-        /* 输入今日体重卡片 */
         .today-card {
             background: #ffffff;
             border-radius: 24px;
@@ -150,7 +148,6 @@
             background: #0e1a24;
             transform: scale(0.97);
         }
-        /* 今日目标体重卡片 */
         .today-goal-card {
             background: #eaf0f6;
             border-radius: 40px;
@@ -177,7 +174,6 @@
             font-weight: 400;
             color: #4c6475;
         }
-        /* 图表容器 */
         .chart-container {
             background: #ffffff;
             border-radius: 32px;
@@ -192,7 +188,6 @@
             max-height: 220px;
             border-radius: 20px;
         }
-        /* 初始化模态 */
         .init-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -307,13 +302,13 @@
                 <input type="number" id="initHeight" step="0.1" min="120" max="230" placeholder="例如 175" value="170">
             </div>
             <button class="init-btn" id="saveInitBtn">生成我的目标 →</button>
-            <p style="font-size:12px; color:#9bb0c0; margin-top:20px;">* 图表横轴含明日，纵轴两位小数。</p>
+            <p style="font-size:12px; color:#9bb0c0; margin-top:20px;">* 图表纵轴两位小数，横轴包含明日。</p>
         </div>
     </div>
 
     <!-- 主界面 -->
     <div id="mainApp" class="card hidden">
-        <div class="github-badge">📦 最近10天+明日 · 纵轴两位小数</div>
+        <div class="github-badge">📦 最近10天+明日 · 稳定不闪烁</div>
 
         <div class="target-section">
             <div class="target-row">
@@ -350,7 +345,7 @@
         <div class="chart-container">
             <canvas id="weightChart" width="400" height="200"></canvas>
         </div>
-        <div class="footnote">⚡ 明日目标已显示 · 纵轴保留两位小数</div>
+        <div class="footnote">⚡ 图表已防抖处理 · 不再闪烁</div>
     </div>
 
     <script>
@@ -360,7 +355,8 @@
 
             let chartInstance = null;
             let initData = null;                 
-            let rawEntries = {};                  
+            let rawEntries = {};     
+            let renderTimeout = null;             // 防抖定时器
 
             // ---------- 工具函数 ----------
             function getTodayDateStr() {
@@ -383,13 +379,6 @@
             function parseDate(str) {
                 const [y, m, d] = str.split('-').map(Number);
                 return new Date(y, m-1, d);
-            }
-
-            function daysBetween(dateStr1, dateStr2) {
-                const d1 = parseDate(dateStr1);
-                const d2 = parseDate(dateStr2);
-                const diffTime = d2 - d1;
-                return Math.round(diffTime / (1000 * 60 * 60 * 24));
             }
 
             // 计算健康体重范围
@@ -420,7 +409,7 @@
             function generateDailyTargetsByPercentage(startWeight, targetWeight, startDateStr) {
                 const totalLoss = startWeight - targetWeight;
                 if (totalLoss <= 0) {
-                    // 无需减重，目标保持恒定
+                    // 无需减重，目标保持恒定 (只有一天)
                     return [{ date: startDateStr, target: startWeight }];
                 }
 
@@ -525,8 +514,21 @@
                 }
             }
 
-            // 绘制图表 (显示最近10天+明天)
+            // 绘制图表 - 使用防抖，避免频繁重绘
             function renderChart() {
+                // 清除之前的定时器
+                if (renderTimeout) {
+                    clearTimeout(renderTimeout);
+                }
+                
+                // 设置新的定时器，延迟50ms执行，合并短时间内多次调用
+                renderTimeout = setTimeout(() => {
+                    actuallyRenderChart();
+                    renderTimeout = null;
+                }, 50);
+            }
+
+            function actuallyRenderChart() {
                 if (!initData || !initData.dailySeries || initData.dailySeries.length === 0) return;
 
                 const ctx = document.getElementById('weightChart').getContext('2d');
@@ -546,16 +548,28 @@
                 const labels = displayDates.map((d, index) => {
                     const mmdd = d.slice(5);
                     if (index === displayDates.length - 1) {
-                        return `🌟${mmdd}`; // 明天加星星标记
+                        return `🌟${mmdd}`;
                     }
                     return mmdd;
                 });
 
                 if (chartInstance) {
-                    chartInstance.data.labels = labels;
-                    chartInstance.data.datasets[0].data = actualData;
-                    chartInstance.data.datasets[1].data = targetData;
-                    chartInstance.update();
+                    // 检查数据是否有变化，避免无意义的更新
+                    const oldLabels = chartInstance.data.labels;
+                    const oldActual = chartInstance.data.datasets[0].data;
+                    const oldTarget = chartInstance.data.datasets[1].data;
+                    
+                    // 简单的浅比较，如果完全相同则不更新
+                    const labelsSame = JSON.stringify(oldLabels) === JSON.stringify(labels);
+                    const actualSame = JSON.stringify(oldActual) === JSON.stringify(actualData);
+                    const targetSame = JSON.stringify(oldTarget) === JSON.stringify(targetData);
+                    
+                    if (!labelsSame || !actualSame || !targetSame) {
+                        chartInstance.data.labels = labels;
+                        chartInstance.data.datasets[0].data = actualData;
+                        chartInstance.data.datasets[1].data = targetData;
+                        chartInstance.update();
+                    }
                 } else {
                     chartInstance = new Chart(ctx, {
                         type: 'line',
@@ -615,6 +629,9 @@
                                         }
                                     }
                                 } 
+                            },
+                            animation: {
+                                duration: 0 // 完全禁用动画，避免过渡闪烁
                             }
                         }
                     });
