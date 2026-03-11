@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>每日减重 · GitHub 版</title>
+    <!-- Chart.js 轻量绘图 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f4f7fb;
+            min-height: 100vh;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 16px 12px 40px;
+        }
+        .card {
+            max-width: 420px;
+            width: 100%;
+            background: white;
+            border-radius: 32px 32px 28px 28px;
+            box-shadow: 0 12px 30px rgba(0, 20, 30, 0.1);
+            overflow: hidden;
+            padding: 24px 20px 30px;
+        }
+        /* 顶部目标区域 */
+        .target-section {
+            background: linear-gradient(145deg, #2b3a4a, #1d2a36);
+            border-radius: 28px;
+            padding: 22px 18px;
+            color: white;
+            box-shadow: 0 8px 12px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+        .target-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .target-label {
+            font-size: 16px;
+            font-weight: 400;
+            opacity: 0.8;
+            letter-spacing: 0.3px;
+        }
+        .target-value {
+            font-size: 34px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+        .target-value small {
+            font-size: 16px;
+            font-weight: 400;
+            opacity: 0.8;
+            margin-left: 4px;
+        }
+        .date-value {
+            font-size: 20px;
+            font-weight: 500;
+            background: rgba(255,255,255,0.15);
+            padding: 6px 16px;
+            border-radius: 60px;
+            backdrop-filter: blur(2px);
+        }
+        .sub-meta {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            padding-top: 14px;
+            margin-top: 4px;
+            font-size: 15px;
+            opacity: 0.9;
+        }
+        /* 输入今日体重卡片 */
+        .today-card {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 18px 16px;
+            margin-bottom: 22px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02), 0 2px 4px rgba(0,20,30,0.03);
+            border: 1px solid #eef2f6;
+        }
+        .today-label {
+            font-size: 15px;
+            font-weight: 500;
+            color: #576f7f;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .today-label span {
+            background: #d0dfeb;
+            color: #1e2e3d;
+            padding: 2px 12px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .weight-input-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .weight-input-row input {
+            flex: 2;
+            min-width: 160px;
+            border: none;
+            background: #f2f6fa;
+            border-radius: 48px;
+            padding: 18px 20px;
+            font-size: 28px;
+            font-weight: 600;
+            color: #14222e;
+            outline: 2px solid transparent;
+            transition: 0.15s;
+            font-variant-numeric: tabular-nums;
+        }
+        .weight-input-row input:focus {
+            outline: 2px solid #2b3a4a;
+            background: #ffffff;
+        }
+        .weight-input-row button {
+            flex: 1;
+            background: #1d2a36;
+            border: none;
+            color: white;
+            font-weight: 600;
+            font-size: 18px;
+            padding: 18px 10px;
+            border-radius: 56px;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 4px 8px rgba(0,30,40,0.1);
+            border: 1px solid #304252;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+        .weight-input-row button:active {
+            background: #0e1a24;
+            transform: scale(0.97);
+        }
+        /* 今日目标体重卡片 */
+        .today-goal-card {
+            background: #eaf0f6;
+            border-radius: 40px;
+            padding: 18px 22px;
+            margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid #cbdae6;
+        }
+        .goal-text {
+            font-size: 18px;
+            font-weight: 500;
+            color: #1c2b38;
+        }
+        .goal-number {
+            font-size: 42px;
+            font-weight: 800;
+            color: #0c1a26;
+            line-height: 1;
+        }
+        .goal-number small {
+            font-size: 18px;
+            font-weight: 400;
+            color: #4c6475;
+        }
+        /* 图表容器 */
+        .chart-container {
+            background: #ffffff;
+            border-radius: 32px;
+            padding: 16px 8px 10px 8px;
+            border: 1px solid #dee9f0;
+            box-shadow: inset 0 1px 3px #ffffff, 0 6px 12px rgba(0,20,30,0.04);
+        }
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: auto !important;
+            max-height: 220px;
+            border-radius: 20px;
+        }
+        /* 初始化模态 (首次输入身高体重) */
+        .init-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            padding: 20px;
+            transition: opacity 0.2s;
+        }
+        .init-card {
+            background: white;
+            max-width: 380px;
+            width: 100%;
+            border-radius: 40px;
+            padding: 32px 26px;
+            box-shadow: 0 30px 50px rgba(0, 20, 30, 0.4);
+        }
+        .init-card h3 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #14222e;
+            font-weight: 600;
+        }
+        .init-desc {
+            color: #547183;
+            margin-bottom: 28px;
+            font-size: 15px;
+        }
+        .init-field {
+            margin-bottom: 20px;
+        }
+        .init-field label {
+            font-weight: 500;
+            color: #1f313f;
+            margin-bottom: 6px;
+            display: block;
+            font-size: 15px;
+        }
+        .init-field input {
+            width: 100%;
+            padding: 18px 18px;
+            font-size: 22px;
+            border-radius: 50px;
+            border: 1px solid #b9ccdb;
+            background: #f4f9ff;
+            font-weight: 500;
+            outline: none;
+        }
+        .init-field input:focus {
+            border-color: #1d2a36;
+            background: #ffffff;
+        }
+        .init-btn {
+            background: #1d2a36;
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 20px;
+            font-size: 20px;
+            font-weight: 600;
+            border-radius: 60px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .footnote {
+            text-align: center;
+            font-size: 11px;
+            color: #a1b7c8;
+            margin-top: 22px;
+            letter-spacing: 0.2px;
+        }
+        .today-hint {
+            font-size: 13px;
+            color: #2e5775;
+            margin-top: 8px;
+            font-weight: 500;
+            background: #e3eef9;
+            padding: 6px 14px;
+            border-radius: 30px;
+            display: inline-block;
+        }
+        /* repo 提示 (github.io) */
+        .github-badge {
+            background: #dde9f5;
+            color: #13293b;
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <!-- 初始化遮罩 (第一次输入身高体重) -->
+    <div id="initOverlay" class="init-overlay">
+        <div class="init-card">
+            <h3>⚡ 开始你的减重旅程</h3>
+            <div class="init-desc">输入当前体重与身高，生成科学每日目标。所有数据只保存在你的浏览器中。</div>
+            <div class="init-field">
+                <label>🔹 当前体重 (kg)</label>
+                <input type="number" id="initWeight" step="0.01" min="20" max="250" placeholder="例如 78.50" value="70.00">
+            </div>
+            <div class="init-field">
+                <label>🔹 身高 (cm)</label>
+                <input type="number" id="initHeight" step="0.1" min="120" max="230" placeholder="例如 175" value="170">
+            </div>
+            <button class="init-btn" id="saveInitBtn">生成我的目标 →</button>
+            <p style="font-size:12px; color:#9bb0c0; margin-top:20px;">* 一日内多次输入将取平均值，数据存储于本地。</p>
+        </div>
+    </div>
+
+    <!-- 主界面 (初始化后可见) -->
+    <div id="mainApp" class="card hidden">
+        <!-- 轻量GitHub.io标记 (仅装饰) -->
+        <div class="github-badge">📦 托管于 GitHub Pages · 本地存储</div>
+
+        <!-- 顶部 目标体重 & 达成日期 -->
+        <div class="target-section">
+            <div class="target-row">
+                <span class="target-label">🎯 目标体重</span>
+                <span class="target-value" id="displayTargetWeight">--<small>kg</small></span>
+            </div>
+            <div class="target-row">
+                <span class="target-label">📅 达成日期</span>
+                <span class="date-value" id="displayTargetDate">----/--/--</span>
+            </div>
+            <div class="sub-meta">
+                <span>⚖️ 健康 BMI 范围</span>
+                <span id="displayBmiRange">-- ~ --</span>
+            </div>
+        </div>
+
+        <!-- 今日体重录入区 (均值累加) -->
+        <div class="today-card">
+            <div class="today-label">
+                📝 今日体重 <span id="todayDateTag"></span>
+                <span id="todayCountBadge" style="background:#c0d6e6;">0次</span>
+            </div>
+            <div class="weight-input-row">
+                <input type="number" id="todayWeightInput" step="0.01" placeholder="例如 77.20" value="">
+                <button id="submitWeightBtn">+ 录入</button>
+            </div>
+            <div id="todayMeanHint" class="today-hint">✨ 当前均值: -- kg</div>
+        </div>
+
+        <!-- 今日目标体重卡片 (固定目标) -->
+        <div class="today-goal-card">
+            <span class="goal-text">📌 今日目标</span>
+            <span class="goal-number" id="todayGoalWeight">--<small>kg</small></span>
+        </div>
+
+        <!-- 体重曲线变化表 -->
+        <div class="chart-container">
+            <canvas id="weightChart" width="400" height="200"></canvas>
+        </div>
+        <div class="footnote">⚡ 每日多次录入取平均值 · 数据只留在你的设备</div>
+    </div>
+
+    <script>
+        (function() {
+            // ---------- 适配 GitHub Pages 存储 (localStorage) ----------
+            const STORAGE_INIT = 'weight_goal_init';         
+            const STORAGE_RAW_ENTRIES = 'weight_raw_entries'; 
+
+            let chartInstance = null;
+            let initData = null;                 
+            let rawEntries = {};                  
+
+            // ---------- 工具函数 ----------
+            function getTodayDateStr() {
+                const d = new Date();
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            function parseDate(str) {
+                const [y, m, d] = str.split('-').map(Number);
+                return new Date(y, m-1, d);
+            }
+
+            function daysBetween(dateStr1, dateStr2) {
+                const d1 = parseDate(dateStr1);
+                const d2 = parseDate(dateStr2);
+                const diffTime = d2 - d1;
+                return Math.round(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+            // 生成每日目标数组 (线性)
+            function generateDailyTargets(startWeight, targetWeight, startDateStr, totalDays) {
+                const dates = [];
+                const start = parseDate(startDateStr);
+                const delta = startWeight - targetWeight;
+                for (let i = 0; i <= totalDays; i++) {
+                    const currentDate = new Date(start);
+                    currentDate.setDate(start.getDate() + i);
+                    const year = currentDate.getFullYear();
+                    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(currentDate.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${day}`;
+                    let target = startWeight - (delta / totalDays) * i;
+                    target = Math.round(target * 100) / 100;
+                    dates.push({ date: dateStr, target });
+                }
+                return dates;
+            }
+
+            function getHealthyWeightRange(heightCm) {
+                const h = heightCm / 100;
+                const low = (18.5 * h * h).toFixed(1);
+                const high = (24.0 * h * h).toFixed(1);
+                return { low, high };
+            }
+
+            function computeTargetWeight(weight, heightCm) {
+                const h = heightCm / 100;
+                const currentBMI = weight / (h * h);
+                const healthyUpperWeight = 24.0 * h * h;
+                if (currentBMI > 24) {
+                    return Math.round(healthyUpperWeight * 100) / 100;
+                } else {
+                    return weight;
+                }
+            }
+
+            function estimateTargetDate(startWeight, targetWeight, startDateStr) {
+                if (targetWeight >= startWeight) return startDateStr;
+                const diff = startWeight - targetWeight;
+                const dailyRate = 0.75 / 7; // 每周0.75kg
+                let daysNeeded = Math.ceil(diff / dailyRate);
+                daysNeeded = Math.max(1, daysNeeded);
+                const start = parseDate(startDateStr);
+                const targetDate = new Date(start);
+                targetDate.setDate(start.getDate() + daysNeeded);
+                const year = targetDate.getFullYear();
+                const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+                const day = String(targetDate.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            // 从rawEntries计算每日平均体重
+            function computeDailyAverages() {
+                const avgMap = new Map();
+                for (const [date, arr] of Object.entries(rawEntries)) {
+                    if (arr.length === 0) continue;
+                    const sum = arr.reduce((acc, w) => acc + w, 0);
+                    const avg = Math.round((sum / arr.length) * 100) / 100;
+                    avgMap.set(date, avg);
+                }
+                return avgMap;
+            }
+
+            // 更新今日平均提示和次数
+            function updateTodayUI() {
+                const today = getTodayDateStr();
+                const entries = rawEntries[today] || [];
+                const count = entries.length;
+                document.getElementById('todayCountBadge').innerText = count + '次';
+
+                if (count > 0) {
+                    const sum = entries.reduce((a, b) => a + b, 0);
+                    const mean = (sum / count).toFixed(2);
+                    document.getElementById('todayMeanHint').innerHTML = `✨ 当前均值: ${mean} kg`;
+                } else {
+                    document.getElementById('todayMeanHint').innerHTML = `✨ 当前均值: -- kg`;
+                }
+            }
+
+            function updateTodayGoal() {
+                if (!initData || !initData.dailySeries) return;
+                const today = getTodayDateStr();
+                const found = initData.dailySeries.find(d => d.date === today);
+                if (found) {
+                    document.getElementById('todayGoalWeight').innerHTML = found.target + '<small>kg</small>';
+                } else {
+                    const last = initData.dailySeries[initData.dailySeries.length - 1];
+                    document.getElementById('todayGoalWeight').innerHTML = (last ? last.target : '--') + '<small>kg</small>';
+                }
+            }
+
+            // 绘制/更新图表
+            function renderChart() {
+                if (!initData || !initData.dailySeries || initData.dailySeries.length === 0) return;
+
+                const ctx = document.getElementById('weightChart').getContext('2d');
+                const series = initData.dailySeries;
+                const labels = series.map(d => d.date.slice(5)); // MM-DD
+                const targetData = series.map(d => d.target);
+
+                const avgMap = computeDailyAverages();
+                const actualData = series.map(d => avgMap.has(d.date) ? avgMap.get(d.date) : null);
+
+                if (chartInstance) {
+                    chartInstance.data.labels = labels;
+                    chartInstance.data.datasets[0].data = actualData;
+                    chartInstance.data.datasets[1].data = targetData;
+                    chartInstance.update();
+                } else {
+                    chartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: '实际体重 (日均)',
+                                    data: actualData,
+                                    borderColor: '#1e3b4f',
+                                    backgroundColor: 'rgba(30,59,79,0.05)',
+                                    tension: 0.15,
+                                    pointBackgroundColor: '#1e3b4f',
+                                    pointRadius: 4,
+                                    spanGaps: true,
+                                    borderWidth: 3
+                                },
+                                {
+                                    label: '目标体重',
+                                    data: targetData,
+                                    borderColor: '#b3c9db',
+                                    backgroundColor: 'transparent',
+                                    borderDash: [6, 6],
+                                    tension: 0,
+                                    pointRadius: 1,
+                                    borderWidth: 2.5,
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { ticks: { callback: v => v + 'kg' } } }
+                        }
+                    });
+                }
+            }
+
+            function refreshTopMeta() {
+                if (!initData) return;
+                document.getElementById('displayTargetWeight').innerHTML = initData.targetWeight + '<small>kg</small>';
+                document.getElementById('displayTargetDate').innerText = initData.targetDate;
+                const range = getHealthyWeightRange(initData.height);
+                document.getElementById('displayBmiRange').innerText = `${range.low} ~ ${range.high} kg`;
+                updateTodayGoal();
+            }
+
+            function persistRawEntries() {
+                localStorage.setItem(STORAGE_RAW_ENTRIES, JSON.stringify(rawEntries));
+            }
+
+            // 从localStorage加载所有数据
+            function loadFromStorage() {
+                const savedInit = localStorage.getItem(STORAGE_INIT);
+                if (savedInit) {
+                    try { initData = JSON.parse(savedInit); } catch { initData = null; }
+                } else {
+                    initData = null;
+                }
+
+                const savedRaw = localStorage.getItem(STORAGE_RAW_ENTRIES);
+                if (savedRaw) {
+                    try { rawEntries = JSON.parse(savedRaw); } catch { rawEntries = {}; }
+                } else {
+                    rawEntries = {};
+                }
+
+                if (initData) {
+                    document.getElementById('initOverlay').classList.add('hidden');
+                    document.getElementById('mainApp').classList.remove('hidden');
+                    refreshTopMeta();
+                    updateTodayUI();
+                    renderChart();
+                } else {
+                    document.getElementById('initOverlay').classList.remove('hidden');
+                    document.getElementById('mainApp').classList.add('hidden');
+                }
+            }
+
+            // 初始化目标 (重置所有原始记录)
+            function initializeGoal(weight, height) {
+                const targetWeight = computeTargetWeight(weight, height);
+                const startDate = getTodayDateStr();
+                const targetDate = estimateTargetDate(weight, targetWeight, startDate);
+                const totalDays = daysBetween(startDate, targetDate);
+                const dailySeries = generateDailyTargets(weight, targetWeight, startDate, totalDays);
+
+                initData = {
+                    startWeight: weight,
+                    targetWeight: targetWeight,
+                    height: height,
+                    startDate: startDate,
+                    targetDate: targetDate,
+                    dailySeries: dailySeries
+                };
+                localStorage.setItem(STORAGE_INIT, JSON.stringify(initData));
+
+                // 全新计划，清空历史录入
+                rawEntries = {};
+                persistRawEntries();
+
+                loadFromStorage(); // 刷新界面
+            }
+
+            // 录入一条新体重 (累加)
+            function addWeightEntry(weight) {
+                if (!initData) return;
+                const today = getTodayDateStr();
+
+                if (!rawEntries[today]) {
+                    rawEntries[today] = [];
+                }
+                rawEntries[today].push(weight);
+                persistRawEntries();
+
+                updateTodayUI();
+                renderChart();   // 均值更新后图表重绘
+            }
+
+            // 事件绑定
+            document.addEventListener('DOMContentLoaded', function() {
+                document.getElementById('todayDateTag').innerText = getTodayDateStr();
+
+                // 初始化按钮
+                document.getElementById('saveInitBtn').addEventListener('click', function() {
+                    const weightInput = document.getElementById('initWeight');
+                    const heightInput = document.getElementById('initHeight');
+                    const weight = parseFloat(weightInput.value);
+                    const height = parseFloat(heightInput.value);
+                    if (isNaN(weight) || weight < 20 || weight > 250 || isNaN(height) || height < 120 || height > 230) {
+                        alert('请输入合理的体重(20~250kg)和身高(120~230cm)');
+                        return;
+                    }
+                    initializeGoal(weight, height);
+                });
+
+                // 录入体重 (累加，取平均)
+                document.getElementById('submitWeightBtn').addEventListener('click', function() {
+                    const input = document.getElementById('todayWeightInput');
+                    const weight = parseFloat(input.value);
+                    if (isNaN(weight) || weight < 10 || weight > 300) {
+                        alert('请填写有效的体重 (10~300kg)');
+                        return;
+                    }
+                    addWeightEntry(weight);
+                    input.value = ''; 
+                });
+
+                // 初次加载
+                loadFromStorage();
+            });
+        })();
+    </script>
+</body>
+</html>
