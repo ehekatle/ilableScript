@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>每日减重 · GitHub 版</title>
+    <title>每日减重 · 百分比目标</title>
     <!-- Chart.js 轻量绘图 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -192,7 +192,7 @@
             max-height: 220px;
             border-radius: 20px;
         }
-        /* 初始化模态 (首次输入身高体重) */
+        /* 初始化模态 */
         .init-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -280,7 +280,6 @@
             border-radius: 30px;
             display: inline-block;
         }
-        /* repo 提示 (github.io) */
         .github-badge {
             background: #dde9f5;
             color: #13293b;
@@ -294,11 +293,11 @@
     </style>
 </head>
 <body>
-    <!-- 初始化遮罩 (第一次输入身高体重) -->
+    <!-- 初始化遮罩 -->
     <div id="initOverlay" class="init-overlay">
         <div class="init-card">
             <h3>⚡ 开始你的减重旅程</h3>
-            <div class="init-desc">输入当前体重与身高，生成科学每日目标。所有数据只保存在你的浏览器中。</div>
+            <div class="init-desc">输入当前体重与身高，生成科学每日目标（固定百分比，安全减重）。</div>
             <div class="init-field">
                 <label>🔹 当前体重 (kg)</label>
                 <input type="number" id="initWeight" step="0.01" min="20" max="250" placeholder="例如 78.50" value="70.00">
@@ -308,16 +307,14 @@
                 <input type="number" id="initHeight" step="0.1" min="120" max="230" placeholder="例如 175" value="170">
             </div>
             <button class="init-btn" id="saveInitBtn">生成我的目标 →</button>
-            <p style="font-size:12px; color:#9bb0c0; margin-top:20px;">* 一日内多次输入将取平均值，数据存储于本地。</p>
+            <p style="font-size:12px; color:#9bb0c0; margin-top:20px;">* 每日多次输入取平均值，图表仅展示最近10天。</p>
         </div>
     </div>
 
-    <!-- 主界面 (初始化后可见) -->
+    <!-- 主界面 -->
     <div id="mainApp" class="card hidden">
-        <!-- 轻量GitHub.io标记 (仅装饰) -->
-        <div class="github-badge">📦 托管于 GitHub Pages · 本地存储</div>
+        <div class="github-badge">📦 最近10天 · 绿色实际 · 红色目标</div>
 
-        <!-- 顶部 目标体重 & 达成日期 -->
         <div class="target-section">
             <div class="target-row">
                 <span class="target-label">🎯 目标体重</span>
@@ -333,7 +330,6 @@
             </div>
         </div>
 
-        <!-- 今日体重录入区 (均值累加) -->
         <div class="today-card">
             <div class="today-label">
                 📝 今日体重 <span id="todayDateTag"></span>
@@ -346,22 +342,19 @@
             <div id="todayMeanHint" class="today-hint">✨ 当前均值: -- kg</div>
         </div>
 
-        <!-- 今日目标体重卡片 (固定目标) -->
         <div class="today-goal-card">
             <span class="goal-text">📌 今日目标</span>
             <span class="goal-number" id="todayGoalWeight">--<small>kg</small></span>
         </div>
 
-        <!-- 体重曲线变化表 -->
         <div class="chart-container">
             <canvas id="weightChart" width="400" height="200"></canvas>
         </div>
-        <div class="footnote">⚡ 每日多次录入取平均值 · 数据只留在你的设备</div>
+        <div class="footnote">⚡ 每日固定百分比减重 · 每日多次录入取平均值</div>
     </div>
 
     <script>
         (function() {
-            // ---------- 适配 GitHub Pages 存储 (localStorage) ----------
             const STORAGE_INIT = 'weight_goal_init';         
             const STORAGE_RAW_ENTRIES = 'weight_raw_entries'; 
 
@@ -390,25 +383,7 @@
                 return Math.round(diffTime / (1000 * 60 * 60 * 24));
             }
 
-            // 生成每日目标数组 (线性)
-            function generateDailyTargets(startWeight, targetWeight, startDateStr, totalDays) {
-                const dates = [];
-                const start = parseDate(startDateStr);
-                const delta = startWeight - targetWeight;
-                for (let i = 0; i <= totalDays; i++) {
-                    const currentDate = new Date(start);
-                    currentDate.setDate(start.getDate() + i);
-                    const year = currentDate.getFullYear();
-                    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-                    const day = String(currentDate.getDate()).padStart(2, '0');
-                    const dateStr = `${year}-${month}-${day}`;
-                    let target = startWeight - (delta / totalDays) * i;
-                    target = Math.round(target * 100) / 100;
-                    dates.push({ date: dateStr, target });
-                }
-                return dates;
-            }
-
+            // 计算健康体重范围
             function getHealthyWeightRange(heightCm) {
                 const h = heightCm / 100;
                 const low = (18.5 * h * h).toFixed(1);
@@ -416,6 +391,7 @@
                 return { low, high };
             }
 
+            // 根据BMI计算目标体重（健康上限）
             function computeTargetWeight(weight, heightCm) {
                 const h = heightCm / 100;
                 const currentBMI = weight / (h * h);
@@ -427,19 +403,63 @@
                 }
             }
 
-            function estimateTargetDate(startWeight, targetWeight, startDateStr) {
-                if (targetWeight >= startWeight) return startDateStr;
-                const diff = startWeight - targetWeight;
-                const dailyRate = 0.75 / 7; // 每周0.75kg
-                let daysNeeded = Math.ceil(diff / dailyRate);
-                daysNeeded = Math.max(1, daysNeeded);
+            /**
+             * 科学每日百分比减重：
+             * - 安全范围：每日减重不超过0.1kg（约每周0.7kg）
+             * - 采用固定每日百分比，使得总减重 = 起始体重 - 目标体重
+             * - 百分比每日递减，保证每天减重绝对值 ≤ 0.1kg
+             */
+            function generateDailyTargetsByPercentage(startWeight, targetWeight, startDateStr) {
+                const totalLoss = startWeight - targetWeight;
+                if (totalLoss <= 0) {
+                    // 无需减重，目标保持恒定
+                    return [{ date: startDateStr, target: startWeight }];
+                }
+
+                // 安全上限：每天最多减0.1kg
+                const maxDailyLoss = 0.1; 
+                // 至少需要的天数
+                const minDaysNeeded = Math.ceil(totalLoss / maxDailyLoss);
+                
+                // 计算每日固定百分比 r, 使得 startWeight * (1 - r)^n = targetWeight
+                // 其中 n = minDaysNeeded （我们取最小安全天数，保证每日减重≤0.1kg）
+                // 解出 r = 1 - (targetWeight/startWeight)^(1/n)
+                const ratio = targetWeight / startWeight;
+                const dailyRate = 1 - Math.pow(ratio, 1 / minDaysNeeded);
+                
+                // 生成每日目标
+                const dates = [];
                 const start = parseDate(startDateStr);
-                const targetDate = new Date(start);
-                targetDate.setDate(start.getDate() + daysNeeded);
-                const year = targetDate.getFullYear();
-                const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-                const day = String(targetDate.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
+                let currentWeight = startWeight;
+                for (let i = 0; i <= minDaysNeeded; i++) {
+                    const currentDate = new Date(start);
+                    currentDate.setDate(start.getDate() + i);
+                    const year = currentDate.getFullYear();
+                    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(currentDate.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${day}`;
+                    
+                    // 目标值 = 前一天体重 * (1 - dailyRate)
+                    // 第一天的目标 = startWeight (i=0)
+                    let target;
+                    if (i === 0) {
+                        target = startWeight;
+                    } else {
+                        target = currentWeight * (1 - dailyRate);
+                    }
+                    // 四舍五入到两位小数
+                    target = Math.round(target * 100) / 100;
+                    dates.push({ date: dateStr, target });
+                    
+                    currentWeight = target; // 用于下一天计算
+                }
+                return dates;
+            }
+
+            // 获取达成日期（从生成的series最后一天）
+            function getTargetDateFromSeries(series) {
+                if (!series || series.length === 0) return getTodayDateStr();
+                return series[series.length - 1].date;
             }
 
             // 从rawEntries计算每日平均体重
@@ -454,7 +474,22 @@
                 return avgMap;
             }
 
-            // 更新今日平均提示和次数
+            // 获取最近10天的日期范围 (从今天往前推9天，共10天)
+            function getLast10DaysRange() {
+                const today = new Date();
+                const dates = [];
+                for (let i = 9; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(today.getDate() - i);
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    dates.push(`${year}-${month}-${day}`);
+                }
+                return dates;
+            }
+
+            // 更新今日平均提示
             function updateTodayUI() {
                 const today = getTodayDateStr();
                 const entries = rawEntries[today] || [];
@@ -482,17 +517,25 @@
                 }
             }
 
-            // 绘制/更新图表
+            // 绘制图表 (仅最近10天)
             function renderChart() {
                 if (!initData || !initData.dailySeries || initData.dailySeries.length === 0) return;
 
                 const ctx = document.getElementById('weightChart').getContext('2d');
-                const series = initData.dailySeries;
-                const labels = series.map(d => d.date.slice(5)); // MM-DD
-                const targetData = series.map(d => d.target);
+                
+                // 获取最近10天日期列表
+                const last10Days = getLast10DaysRange();
+                
+                // 从dailySeries中提取这10天的目标值
+                const targetMap = new Map(initData.dailySeries.map(d => [d.date, d.target]));
+                const targetData = last10Days.map(date => targetMap.has(date) ? targetMap.get(date) : null);
 
+                // 实际体重均值
                 const avgMap = computeDailyAverages();
-                const actualData = series.map(d => avgMap.has(d.date) ? avgMap.get(d.date) : null);
+                const actualData = last10Days.map(date => avgMap.has(date) ? avgMap.get(date) : null);
+
+                // 标签显示为 MM-DD
+                const labels = last10Days.map(d => d.slice(5));
 
                 if (chartInstance) {
                     chartInstance.data.labels = labels;
@@ -508,10 +551,10 @@
                                 {
                                     label: '实际体重 (日均)',
                                     data: actualData,
-                                    borderColor: '#1e3b4f',
-                                    backgroundColor: 'rgba(30,59,79,0.05)',
+                                    borderColor: '#2e7d32',        // 绿色
+                                    backgroundColor: 'rgba(46,125,50,0.05)',
                                     tension: 0.15,
-                                    pointBackgroundColor: '#1e3b4f',
+                                    pointBackgroundColor: '#2e7d32',
                                     pointRadius: 4,
                                     spanGaps: true,
                                     borderWidth: 3
@@ -519,11 +562,11 @@
                                 {
                                     label: '目标体重',
                                     data: targetData,
-                                    borderColor: '#b3c9db',
+                                    borderColor: '#d32f2f',        // 红色
                                     backgroundColor: 'transparent',
                                     borderDash: [6, 6],
                                     tension: 0,
-                                    pointRadius: 1,
+                                    pointRadius: 2,
                                     borderWidth: 2.5,
                                 }
                             ]
@@ -531,8 +574,15 @@
                         options: {
                             responsive: true,
                             maintainAspectRatio: true,
-                            plugins: { legend: { display: false } },
-                            scales: { y: { ticks: { callback: v => v + 'kg' } } }
+                            plugins: { 
+                                legend: { display: false },
+                                tooltip: { mode: 'index', intersect: false }
+                            },
+                            scales: { 
+                                y: { 
+                                    ticks: { callback: v => v + 'kg' }
+                                } 
+                            }
                         }
                     });
                 }
@@ -551,7 +601,7 @@
                 localStorage.setItem(STORAGE_RAW_ENTRIES, JSON.stringify(rawEntries));
             }
 
-            // 从localStorage加载所有数据
+            // 从localStorage加载
             function loadFromStorage() {
                 const savedInit = localStorage.getItem(STORAGE_INIT);
                 if (savedInit) {
@@ -579,13 +629,14 @@
                 }
             }
 
-            // 初始化目标 (重置所有原始记录)
+            // 初始化目标 (使用百分比生成)
             function initializeGoal(weight, height) {
                 const targetWeight = computeTargetWeight(weight, height);
                 const startDate = getTodayDateStr();
-                const targetDate = estimateTargetDate(weight, targetWeight, startDate);
-                const totalDays = daysBetween(startDate, targetDate);
-                const dailySeries = generateDailyTargets(weight, targetWeight, startDate, totalDays);
+                
+                // 使用百分比方法生成每日目标
+                const dailySeries = generateDailyTargetsByPercentage(weight, targetWeight, startDate);
+                const targetDate = getTargetDateFromSeries(dailySeries);
 
                 initData = {
                     startWeight: weight,
@@ -597,14 +648,14 @@
                 };
                 localStorage.setItem(STORAGE_INIT, JSON.stringify(initData));
 
-                // 全新计划，清空历史录入
+                // 重置录入
                 rawEntries = {};
                 persistRawEntries();
 
-                loadFromStorage(); // 刷新界面
+                loadFromStorage();
             }
 
-            // 录入一条新体重 (累加)
+            // 录入新体重
             function addWeightEntry(weight) {
                 if (!initData) return;
                 const today = getTodayDateStr();
@@ -616,14 +667,12 @@
                 persistRawEntries();
 
                 updateTodayUI();
-                renderChart();   // 均值更新后图表重绘
+                renderChart();
             }
 
-            // 事件绑定
             document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('todayDateTag').innerText = getTodayDateStr();
 
-                // 初始化按钮
                 document.getElementById('saveInitBtn').addEventListener('click', function() {
                     const weightInput = document.getElementById('initWeight');
                     const heightInput = document.getElementById('initHeight');
@@ -636,7 +685,6 @@
                     initializeGoal(weight, height);
                 });
 
-                // 录入体重 (累加，取平均)
                 document.getElementById('submitWeightBtn').addEventListener('click', function() {
                     const input = document.getElementById('todayWeightInput');
                     const weight = parseFloat(input.value);
@@ -648,7 +696,6 @@
                     input.value = ''; 
                 });
 
-                // 初次加载
                 loadFromStorage();
             });
         })();
