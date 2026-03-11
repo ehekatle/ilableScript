@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>每日减重 · 稳定版</title>
+    <title>每日减重 · 首日目标修正</title>
     <!-- Chart.js 轻量绘图 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -302,13 +302,13 @@
                 <input type="number" id="initHeight" step="0.1" min="120" max="230" placeholder="例如 175" value="170">
             </div>
             <button class="init-btn" id="saveInitBtn">生成我的目标 →</button>
-            <p style="font-size:12px; color:#9bb0c0; margin-top:20px;">* 图表纵轴两位小数，横轴包含明日。</p>
+            <p style="font-size:12px; color:#9bb0c0; margin-top:20px;">* 首日目标等于当日平均体重。</p>
         </div>
     </div>
 
     <!-- 主界面 -->
     <div id="mainApp" class="card hidden">
-        <div class="github-badge">📦 最近10天+明日 · 稳定不闪烁</div>
+        <div class="github-badge">📦 首日目标匹配均值 · 不闪烁</div>
 
         <div class="target-section">
             <div class="target-row">
@@ -345,7 +345,7 @@
         <div class="chart-container">
             <canvas id="weightChart" width="400" height="200"></canvas>
         </div>
-        <div class="footnote">⚡ 图表已防抖处理 · 不再闪烁</div>
+        <div class="footnote">⚡ 首日目标=平均体重 · 图表防抖</div>
     </div>
 
     <script>
@@ -356,7 +356,7 @@
             let chartInstance = null;
             let initData = null;                 
             let rawEntries = {};     
-            let renderTimeout = null;             // 防抖定时器
+            let renderTimeout = null;
 
             // ---------- 工具函数 ----------
             function getTodayDateStr() {
@@ -381,7 +381,6 @@
                 return new Date(y, m-1, d);
             }
 
-            // 计算健康体重范围
             function getHealthyWeightRange(heightCm) {
                 const h = heightCm / 100;
                 const low = (18.5 * h * h).toFixed(1);
@@ -389,7 +388,6 @@
                 return { low, high };
             }
 
-            // 根据BMI计算目标体重（健康上限）
             function computeTargetWeight(weight, heightCm) {
                 const h = heightCm / 100;
                 const currentBMI = weight / (h * h);
@@ -405,6 +403,7 @@
              * 科学每日百分比减重：
              * - 安全范围：每日减重不超过0.1kg
              * - 固定百分比每日递减
+             * - 注意：首日目标（startDate）会被设置为 startWeight
              */
             function generateDailyTargetsByPercentage(startWeight, targetWeight, startDateStr) {
                 const totalLoss = startWeight - targetWeight;
@@ -422,6 +421,8 @@
                 const dates = [];
                 const start = parseDate(startDateStr);
                 let currentWeight = startWeight;
+                
+                // i=0 是第一天，目标 = startWeight
                 for (let i = 0; i <= minDaysNeeded; i++) {
                     const currentDate = new Date(start);
                     currentDate.setDate(start.getDate() + i);
@@ -432,19 +433,19 @@
                     
                     let target;
                     if (i === 0) {
-                        target = startWeight;
+                        target = startWeight;  // 第一天就是起始体重
                     } else {
+                        // 第二天开始才按百分比递减
                         target = currentWeight * (1 - dailyRate);
                     }
                     target = Math.round(target * 100) / 100;
                     dates.push({ date: dateStr, target });
                     
-                    currentWeight = target;
+                    currentWeight = target; // 用于下一天计算
                 }
                 return dates;
             }
 
-            // 获取达成日期
             function getTargetDateFromSeries(series) {
                 if (!series || series.length === 0) return getTodayDateStr();
                 return series[series.length - 1].date;
@@ -504,24 +505,31 @@
 
             function updateTodayGoal() {
                 if (!initData || !initData.dailySeries) return;
+                
                 const today = getTodayDateStr();
-                const found = initData.dailySeries.find(d => d.date === today);
-                if (found) {
-                    document.getElementById('todayGoalWeight').innerHTML = found.target + '<small>kg</small>';
+                const avgMap = computeDailyAverages();
+                
+                // 核心修复：如果今天有录入数据，今日目标应该等于今日平均体重
+                if (avgMap.has(today)) {
+                    const todayAvg = avgMap.get(today);
+                    document.getElementById('todayGoalWeight').innerHTML = todayAvg.toFixed(2) + '<small>kg</small>';
                 } else {
-                    const last = initData.dailySeries[initData.dailySeries.length - 1];
-                    document.getElementById('todayGoalWeight').innerHTML = (last ? last.target : '--') + '<small>kg</small>';
+                    // 如果没有录入，则显示计划中的目标
+                    const found = initData.dailySeries.find(d => d.date === today);
+                    if (found) {
+                        document.getElementById('todayGoalWeight').innerHTML = found.target + '<small>kg</small>';
+                    } else {
+                        const last = initData.dailySeries[initData.dailySeries.length - 1];
+                        document.getElementById('todayGoalWeight').innerHTML = (last ? last.target : '--') + '<small>kg</small>';
+                    }
                 }
             }
 
-            // 绘制图表 - 使用防抖，避免频繁重绘
+            // 绘制图表 - 使用防抖
             function renderChart() {
-                // 清除之前的定时器
                 if (renderTimeout) {
                     clearTimeout(renderTimeout);
                 }
-                
-                // 设置新的定时器，延迟50ms执行，合并短时间内多次调用
                 renderTimeout = setTimeout(() => {
                     actuallyRenderChart();
                     renderTimeout = null;
@@ -533,18 +541,16 @@
 
                 const ctx = document.getElementById('weightChart').getContext('2d');
                 
-                // 获取显示日期列表 (最近10天 + 明天)
                 const displayDates = getDisplayDates();
                 
-                // 从dailySeries中提取目标值
+                // 目标值：仍使用计划中的目标（红色虚线）
                 const targetMap = new Map(initData.dailySeries.map(d => [d.date, d.target]));
                 const targetData = displayDates.map(date => targetMap.has(date) ? targetMap.get(date) : null);
 
-                // 实际体重均值
+                // 实际体重均值（绿色实线）
                 const avgMap = computeDailyAverages();
                 const actualData = displayDates.map(date => avgMap.has(date) ? avgMap.get(date) : null);
 
-                // 标签显示为 MM-DD，并为明天加上🌟标记
                 const labels = displayDates.map((d, index) => {
                     const mmdd = d.slice(5);
                     if (index === displayDates.length - 1) {
@@ -554,12 +560,10 @@
                 });
 
                 if (chartInstance) {
-                    // 检查数据是否有变化，避免无意义的更新
                     const oldLabels = chartInstance.data.labels;
                     const oldActual = chartInstance.data.datasets[0].data;
                     const oldTarget = chartInstance.data.datasets[1].data;
                     
-                    // 简单的浅比较，如果完全相同则不更新
                     const labelsSame = JSON.stringify(oldLabels) === JSON.stringify(labels);
                     const actualSame = JSON.stringify(oldActual) === JSON.stringify(actualData);
                     const targetSame = JSON.stringify(oldTarget) === JSON.stringify(targetData);
@@ -579,7 +583,7 @@
                                 {
                                     label: '实际体重 (日均)',
                                     data: actualData,
-                                    borderColor: '#2e7d32',        // 绿色
+                                    borderColor: '#2e7d32',
                                     backgroundColor: 'rgba(46,125,50,0.05)',
                                     tension: 0.15,
                                     pointBackgroundColor: '#2e7d32',
@@ -590,7 +594,7 @@
                                 {
                                     label: '目标体重',
                                     data: targetData,
-                                    borderColor: '#d32f2f',        // 红色
+                                    borderColor: '#d32f2f',
                                     backgroundColor: 'transparent',
                                     borderDash: [6, 6],
                                     tension: 0,
@@ -631,7 +635,7 @@
                                 } 
                             },
                             animation: {
-                                duration: 0 // 完全禁用动画，避免过渡闪烁
+                                duration: 0
                             }
                         }
                     });
@@ -651,7 +655,6 @@
                 localStorage.setItem(STORAGE_RAW_ENTRIES, JSON.stringify(rawEntries));
             }
 
-            // 从localStorage加载
             function loadFromStorage() {
                 const savedInit = localStorage.getItem(STORAGE_INIT);
                 if (savedInit) {
@@ -715,6 +718,8 @@
                 persistRawEntries();
 
                 updateTodayUI();
+                // 关键：更新今日目标（因为今天的目标应该等于新的平均体重）
+                updateTodayGoal();
                 renderChart();
             }
 
