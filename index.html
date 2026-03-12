@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>体重日记</title>
-    <!-- 使用官方可靠 CDN，添加 crossorigin 和 referrerpolicy 属性 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" integrity="sha512-1H4Zy8Q3TD3am6L76+8OPe7dRgsQADeth5C+yrWZ0RMp4XW6B++Np0uM7D8GEtUjJN+rfNeGvOyz/gxHZ7E8g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/dayjs.min.js" integrity="sha512-FwNWaxyhDlT6vBcO9+pG+m1TEsL66O5YcOib6Jvc7n5OkIExGyPQY1GXWNuQr5vP0BxFcQHtFwY05vTqY1WTw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <title>Percy · 体重日记</title>
+    <!-- 引入极简图表库 Chart.js 轻量版本 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- 引入日期处理库 -->
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -393,63 +394,12 @@
             letter-spacing: 0.2px;
         }
 
-        /* 备用图表（当Chart.js加载失败时） */
-        .fallback-chart {
-            display: flex;
-            align-items: flex-end;
-            justify-content: space-between;
-            height: 180px;
-            padding: 20px 0 10px;
-        }
-
-        .fallbar {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .fallbar-bars {
-            display: flex;
-            gap: 4px;
-            align-items: flex-end;
-            height: 120px;
-        }
-
-        .fallbar-red {
-            width: 12px;
-            background: #ef4444;
-            border-radius: 4px 4px 0 0;
-        }
-
-        .fallbar-green {
-            width: 12px;
-            background: #10b981;
-            border-radius: 4px 4px 0 0;
-        }
-
-        .fallbar-date {
-            font-size: 10px;
-            color: #64748b;
-        }
-
-        .chart-error {
+        /* 空状态 */
+        .no-data {
             text-align: center;
-            padding: 20px;
+            padding: 40px 0;
             color: #94a3b8;
-            font-size: 13px;
-        }
-
-        .retry-btn {
-            background: none;
-            border: 1px solid #e2e8f0;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            color: #64748b;
-            cursor: pointer;
-            margin-top: 10px;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -457,49 +407,6 @@
     <div id="app"></div>
 
     <script>
-        // 检测 Chart.js 和 dayjs 是否成功加载
-        window.chartJsLoaded = false;
-        window.dayjsLoaded = false;
-        
-        // 定义备用 dayjs 功能
-        function simpleFormatDate(date, format) {
-            const d = new Date(date);
-            const month = d.getMonth() + 1;
-            const day = d.getDate();
-            return `${month}/${day}`;
-        }
-        
-        // 使用 Cloudflare CDN 并添加重试机制
-        function loadScript(src, callback) {
-            const script = document.createElement('script');
-            script.src = src;
-            script.onload = callback;
-            script.onerror = () => {
-                console.log('Script load failed:', src);
-                callback(false);
-            };
-            document.head.appendChild(script);
-        }
-
-        // 确保脚本加载
-        (function ensureLibraries() {
-            if (typeof Chart !== 'undefined') window.chartJsLoaded = true;
-            if (typeof dayjs !== 'undefined') window.dayjsLoaded = true;
-            
-            // 如果未加载，尝试备用CDN
-            if (typeof Chart === 'undefined') {
-                loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', (success) => {
-                    if (typeof Chart !== 'undefined') window.chartJsLoaded = true;
-                });
-            }
-            
-            if (typeof dayjs === 'undefined') {
-                loadScript('https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js', (success) => {
-                    if (typeof dayjs !== 'undefined') window.dayjsLoaded = true;
-                });
-            }
-        })();
-
         (function() {
             // 常量定义
             const APP = {
@@ -547,16 +454,13 @@
                 return Math.min(100, Math.max(0, (progress / total) * 100));
             }
 
-            // 格式化日期 - 使用原生JS确保不依赖dayjs
+            // 格式化日期
             function formatDate(date) {
-                const y = date.getFullYear();
-                const m = String(date.getMonth() + 1).padStart(2, '0');
-                const d = String(date.getDate()).padStart(2, '0');
-                return `${y}-${m}-${d}`;
+                return dayjs(date).format('YYYY-MM-DD');
             }
 
             function formatDisplayDate(date) {
-                return `${date.getMonth() + 1}/${date.getDate()}`;
+                return dayjs(date).format('M/D');
             }
 
             // GitHub 同步类
@@ -642,7 +546,7 @@
                     } else if (status === 'success') {
                         statusEl.innerHTML = '<span>✓</span><span>已同步</span>';
                     } else if (status === 'error') {
-                        statusEl.innerHTML = '<span>⚠</span><span>同步失败</span>';
+                        statusEl.innerHTML = `<span>⚠</span><span>同步失败</span>`;
                     }
                 }
             }
@@ -657,7 +561,6 @@
                     this.view = 'login';
                     this.sync = new GitHubSync(APP.GITHUB_REPO);
                     this.chart = null;
-                    this.useFallbackChart = false;
                     
                     this.init();
                 }
@@ -732,17 +635,30 @@
                     this.render();
                 }
 
-                // 获取图表数据
-                getChartData() {
-                    const data = [];
-                    
-                    // 前9天 + 今天
+                // 更新图表
+                updateChart() {
+                    if (this.chart) {
+                        this.chart.destroy();
+                    }
+
+                    const ctx = document.getElementById('weight-chart');
+                    if (!ctx) return;
+
+                    // 获取最近11天的数据
+                    const dates = [];
+                    const labels = [];
+                    const actualData = [];
+                    const targetData = [];
+
                     for (let i = 9; i >= 0; i--) {
-                        const d = new Date();
-                        d.setDate(d.getDate() - i);
+                        const d = dayjs().subtract(i, 'day').toDate();
+                        dates.push(d);
+                        labels.push(formatDisplayDate(d));
+                        
                         const dateStr = formatDate(d);
                         const target = getTargetForDate(d, this.targets);
-                        
+                        targetData.push(target);
+
                         let actual = null;
                         if (this.entries[`${dateStr}_avg`]) {
                             actual = this.entries[`${dateStr}_avg`];
@@ -751,169 +667,99 @@
                             actual = entries.reduce((a, b) => a + b, 0) / entries.length;
                             actual = Math.round(actual * 100) / 100;
                         }
-                        
-                        data.push({
-                            date: d,
-                            displayDate: formatDisplayDate(d),
-                            target: target,
-                            actual: actual
-                        });
-                    }
-                    
-                    // 明天
-                    const tomorrow = new Date();
-                    tomorrow.setDate(tomorrow.getDate() + 1);
-                    data.push({
-                        date: tomorrow,
-                        displayDate: formatDisplayDate(tomorrow),
-                        target: getTargetForDate(tomorrow, this.targets),
-                        actual: null
-                    });
-                    
-                    return data;
-                }
-
-                // 更新图表
-                updateChart() {
-                    // 检查 Chart.js 是否可用
-                    if (typeof Chart === 'undefined' || this.useFallbackChart) {
-                        this.renderFallbackChart();
-                        return;
+                        actualData.push(actual);
                     }
 
-                    try {
-                        if (this.chart) {
-                            this.chart.destroy();
-                        }
+                    // 添加明天
+                    const tomorrow = dayjs().add(1, 'day').toDate();
+                    labels.push(formatDisplayDate(tomorrow));
+                    targetData.push(getTargetForDate(tomorrow, this.targets));
+                    actualData.push(null);
 
-                        const ctx = document.getElementById('weight-chart');
-                        if (!ctx) return;
-
-                        const chartData = this.getChartData();
-                        const labels = chartData.map(d => d.displayDate);
-                        const actualData = chartData.map(d => d.actual);
-                        const targetData = chartData.map(d => d.target);
-
-                        // 找到有效的体重范围
-                        const allValues = [...targetData, ...actualData.filter(v => v !== null)];
-                        const minWeight = Math.min(65, ...allValues) - 2;
-                        const maxWeight = Math.max(APP.START_WEIGHT + 1, ...allValues) + 2;
-
-                        this.chart = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: labels,
-                                datasets: [
-                                    {
-                                        label: '实际体重',
-                                        data: actualData,
-                                        borderColor: '#ef4444',
-                                        backgroundColor: 'transparent',
-                                        tension: 0.3,
-                                        pointRadius: 4,
-                                        pointHoverRadius: 6,
-                                        pointBackgroundColor: '#ef4444',
-                                        borderWidth: 2,
-                                        spanGaps: true,
-                                    },
-                                    {
-                                        label: '目标体重',
-                                        data: targetData,
-                                        borderColor: '#10b981',
-                                        backgroundColor: 'transparent',
-                                        tension: 0.3,
-                                        pointRadius: 4,
-                                        pointHoverRadius: 6,
-                                        pointBackgroundColor: '#10b981',
-                                        borderWidth: 2,
-                                        borderDash: [5, 3],
+                    // 创建极简风格的图表
+                    this.chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: '实际体重',
+                                    data: actualData,
+                                    borderColor: '#ef4444',
+                                    backgroundColor: 'transparent',
+                                    tension: 0.3,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6,
+                                    pointBackgroundColor: '#ef4444',
+                                    borderWidth: 2,
+                                },
+                                {
+                                    label: '目标体重',
+                                    data: targetData,
+                                    borderColor: '#10b981',
+                                    backgroundColor: 'transparent',
+                                    tension: 0.3,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6,
+                                    pointBackgroundColor: '#10b981',
+                                    borderWidth: 2,
+                                    borderDash: [5, 3],
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    backgroundColor: '#0f172a',
+                                    titleColor: '#f8fafc',
+                                    bodyColor: '#cbd5e1',
+                                    padding: 12,
+                                    cornerRadius: 16,
+                                    displayColors: false,
+                                    callbacks: {
+                                        label: (context) => {
+                                            const value = context.raw;
+                                            return value ? `${value.toFixed(1)} kg` : '未录入';
+                                        }
                                     }
-                                ]
+                                }
                             },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: {
-                                        display: false
+                            scales: {
+                                y: {
+                                    beginAtZero: false,
+                                    min: Math.min(65, ...targetData) - 2,
+                                    max: Math.max(APP.START_WEIGHT + 1, ...targetData) + 2,
+                                    grid: {
+                                        color: '#f1f5f9',
+                                        drawBorder: false,
                                     },
-                                    tooltip: {
-                                        backgroundColor: '#0f172a',
-                                        titleColor: '#f8fafc',
-                                        bodyColor: '#cbd5e1',
-                                        padding: 12,
-                                        cornerRadius: 16,
-                                        displayColors: false,
-                                        callbacks: {
-                                            label: (context) => {
-                                                const value = context.raw;
-                                                return value ? `${value.toFixed(1)} kg` : '未录入';
-                                            }
+                                    ticks: {
+                                        stepSize: 5,
+                                        color: '#94a3b8',
+                                        font: {
+                                            size: 11
                                         }
                                     }
                                 },
-                                scales: {
-                                    y: {
-                                        beginAtZero: false,
-                                        min: Math.floor(minWeight / 5) * 5,
-                                        max: Math.ceil(maxWeight / 5) * 5,
-                                        grid: {
-                                            color: '#f1f5f9',
-                                            drawBorder: false,
-                                        },
-                                        ticks: {
-                                            stepSize: 5,
-                                            color: '#94a3b8',
-                                            font: {
-                                                size: 11
-                                            }
-                                        }
+                                x: {
+                                    grid: {
+                                        display: false
                                     },
-                                    x: {
-                                        grid: {
-                                            display: false
-                                        },
-                                        ticks: {
-                                            color: '#64748b',
-                                            font: {
-                                                size: 11
-                                            },
-                                            maxRotation: 45,
-                                            minRotation: 45
+                                    ticks: {
+                                        color: '#64748b',
+                                        font: {
+                                            size: 11
                                         }
                                     }
                                 }
                             }
-                        });
-                    } catch (e) {
-                        console.error('图表渲染失败，使用备用视图', e);
-                        this.useFallbackChart = true;
-                        this.renderFallbackChart();
-                    }
-                }
-
-                // 备用柱状图
-                renderFallbackChart() {
-                    const container = document.getElementById('chart-fallback');
-                    if (!container) return;
-
-                    const chartData = this.getChartData();
-                    const maxWeight = 100; // 缩放基准
-
-                    container.innerHTML = chartData.map(item => {
-                        const targetHeight = item.target ? Math.min(120, (item.target / maxWeight) * 120) : 0;
-                        const actualHeight = item.actual ? Math.min(120, (item.actual / maxWeight) * 120) : 0;
-                        
-                        return `
-                            <div class="fallbar">
-                                <div class="fallbar-bars">
-                                    ${item.actual ? `<div class="fallbar-red" style="height: ${actualHeight}px;"></div>` : ''}
-                                    ${item.target ? `<div class="fallbar-green" style="height: ${targetHeight}px;"></div>` : ''}
-                                </div>
-                                <div class="fallbar-date">${item.displayDate}</div>
-                            </div>
-                        `;
-                    }).join('');
+                        }
+                    });
                 }
 
                 render() {
@@ -926,13 +772,7 @@
                         app.innerHTML = this.renderMain();
                         this.attachMainEvents();
                         // 等待DOM更新后再渲染图表
-                        setTimeout(() => {
-                            if (typeof Chart !== 'undefined' && !this.useFallbackChart) {
-                                this.updateChart();
-                            } else {
-                                this.renderFallbackChart();
-                            }
-                        }, 100);
+                        setTimeout(() => this.updateChart(), 50);
                     }
                 }
 
@@ -970,7 +810,6 @@
                     }
 
                     const progress = calculateProgress(currentWeight);
-                    const chartData = this.getChartData();
 
                     return `
                         <div>
@@ -1047,24 +886,12 @@
                                 </div>
 
                                 <div class="chart-container">
-                                    ${typeof Chart !== 'undefined' && !this.useFallbackChart 
-                                        ? '<canvas id="weight-chart"></canvas>' 
-                                        : '<div id="chart-fallback" class="fallback-chart"></div>'
-                                    }
+                                    <canvas id="weight-chart"></canvas>
                                 </div>
-                                
-                                ${typeof Chart === 'undefined' ? `
-                                    <div class="chart-error">
-                                        <p>图表库加载中，使用备用显示</p>
-                                        <button class="retry-btn" onclick="location.reload()">重试</button>
-                                    </div>
-                                ` : ''}
                             </div>
 
                             <div class="footer">
-                                ${this.sync.lastSyncTime 
-                                    ? `上次同步 ${new Date(this.sync.lastSyncTime).toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'})}` 
-                                    : '等待同步'}
+                                ${this.sync.lastSyncTime ? `上次同步 ${dayjs(this.sync.lastSyncTime).format('MM-DD HH:mm')}` : '等待同步'}
                             </div>
                         </div>
                     `;
