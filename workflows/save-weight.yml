@@ -19,17 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pages: write
-      id-token: write
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
       
-      - name: Parse and validate data
-        id: parse
+      - name: Save user data
         run: |
           # 获取输入数据
           if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
@@ -43,52 +38,19 @@ jobs:
           # 移除引号
           USERNAME=$(echo "$USERNAME" | sed 's/^"//;s/"$//')
           
-          echo "USERNAME=$USERNAME" >> $GITHUB_ENV
-          
-          # 保存到临时文件
-          echo "$DATA" > /tmp/new-data.json
-          
-          # 验证数据格式
-          if ! jq empty /tmp/new-data.json 2>/dev/null; then
-            echo "❌ 无效的JSON数据"
-            exit 1
-          fi
-          
-          echo "✅ 数据验证通过"
-          echo "👤 用户名: $USERNAME"
-      
-      - name: Create or update user data
-        run: |
           # 创建用户数据目录
           mkdir -p docs/data/users
           
-          USER_FILE="docs/data/users/${USERNAME}.json"
-          
-          # 如果已存在用户数据，可以在这里做合并（如果需要）
-          if [ -f "$USER_FILE" ]; then
-            echo "📂 发现现有用户数据，正在更新..."
-            # 这里直接用新数据覆盖，因为我们是完整保存
-          fi
-          
           # 保存用户数据
-          cp /tmp/new-data.json "$USER_FILE"
+          echo "$DATA" > "docs/data/users/${USERNAME}.json"
           
-          # 格式化JSON以便阅读
-          jq '.' "$USER_FILE" > /tmp/formatted.json
-          mv /tmp/formatted.json "$USER_FILE"
-          
-          echo "✅ 用户数据已保存: $USER_FILE"
-          
-          # 显示数据统计
-          echo "📊 数据统计:" >> $GITHUB_STEP_SUMMARY
-          echo "- 用户名: ${USERNAME}" >> $GITHUB_STEP_SUMMARY
-          echo "- 身高: $(jq -r '.height' "$USER_FILE") cm" >> $GITHUB_STEP_SUMMARY
-          echo "- 初始体重: $(jq -r '.weight' "$USER_FILE") kg" >> $GITHUB_STEP_SUMMARY
-          echo "- 目标体重: $(jq -r '.goal' "$USER_FILE") kg" >> $GITHUB_STEP_SUMMARY
-          echo "- 记录月份数: $(jq '.progress | length' "$USER_FILE")" >> $GITHUB_STEP_SUMMARY
+          # 格式化JSON
+          if command -v jq &> /dev/null; then
+            jq '.' "docs/data/users/${USERNAME}.json" > /tmp/formatted.json
+            mv /tmp/formatted.json "docs/data/users/${USERNAME}.json"
+          fi
       
-      - name: Check for changes
-        id: git-check
+      - name: Commit and push
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
@@ -96,24 +58,8 @@ jobs:
           git add docs/data/users/
           
           if git diff --staged --quiet; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ 数据无变化，跳过提交"
+            echo "No changes"
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "📝 检测到数据变化，准备提交"
+            git commit -m "📊 更新用户数据 - $(date +'%Y-%m-%d')"
+            git push
           fi
-      
-      - name: Commit and push changes
-        if: steps.git-check.outputs.changed == 'true'
-        run: |
-          git commit -m "📊 更新用户数据 - ${USERNAME} - $(date +'%Y-%m-%d %H:%M:%S')"
-          git push
-          echo "✅ 数据已成功提交到仓库"
-      
-      - name: Create timestamp file for Pages
-        if: steps.git-check.outputs.changed == 'true'
-        run: |
-          echo "{\"updated\": \"$(date -Iseconds)\", \"user\": \"${USERNAME}\"}" > docs/last-update.json
-          git add docs/last-update.json
-          git commit -m "🔄 更新部署时间戳" || true
-          git push || true
