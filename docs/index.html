@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>体重日记</title>
+    <title>智能体重日记</title>
     <!-- 使用本地Chart.js -->
-    <script src="https://gh-proxy.org/https://raw.githubusercontent.com/ehekatle/fit/main/js/chart.umd.min.js"></script>
+    <script src="js/chart.umd.min.js"></script>
     <style>
         /* ... 保持之前的CSS样式不变 ... */
         * {
@@ -358,7 +358,7 @@
             opacity: 0.8;
         }
 
-        /* 录入区域 */
+        /* 录入区域 - 修复输入问题 */
         .input-section {
             background: white;
             border-radius: 24px;
@@ -390,6 +390,10 @@
             outline: none;
         }
 
+        .weight-input:focus {
+            background: #e6edf5;
+        }
+
         .add-btn {
             width: 60px;
             height: 60px;
@@ -401,6 +405,9 @@
             font-weight: 400;
             cursor: pointer;
             transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .add-btn:hover {
@@ -412,6 +419,7 @@
             flex-wrap: wrap;
             gap: 10px;
             margin-bottom: 16px;
+            min-height: 50px;
         }
 
         .entry-tag {
@@ -429,6 +437,7 @@
             color: #94a3b8;
             cursor: pointer;
             font-size: 16px;
+            font-weight: bold;
         }
 
         .remove-entry:hover {
@@ -463,13 +472,14 @@
             transition: background 0.2s;
         }
 
-        .save-btn:hover {
+        .save-btn:hover:not(:disabled) {
             background: #2563eb;
         }
 
         .save-btn:disabled {
             background: #cbd5e1;
             cursor: not-allowed;
+            opacity: 0.6;
         }
 
         /* 图表区域 */
@@ -525,8 +535,13 @@
             transition: all 0.2s;
         }
 
-        .nav-btn:hover {
+        .nav-btn:hover:not(:disabled) {
             background: #f1f5f9;
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
         }
 
         .chart-container {
@@ -809,6 +824,7 @@
                     this.showModal = null;
                     this.bmiValue = APP.BMI_DEFAULT;
                     this.errorMsg = null;
+                    this.weightInputValue = ''; // 添加输入框状态
                     
                     this.init();
                 }
@@ -818,7 +834,6 @@
                     if (saved) {
                         try {
                             const parsed = JSON.parse(saved);
-                            // 确保解析出来的数据结构正确
                             if (parsed && parsed.username && parsed.data) {
                                 this.currentUser = parsed.username;
                                 this.userData = parsed.data;
@@ -992,13 +1007,11 @@
                     this.checkAndFillMissingData();
                     this.prepareTodayEntries();
                     
-                    // 保存登录状态
                     const loginState = {
                         username: this.currentUser,
                         data: this.userData
                     };
                     localStorage.setItem(APP.STORAGE_KEY, JSON.stringify(loginState));
-                    console.log('登录成功，保存状态:', loginState);
                     
                     this.render();
                 }
@@ -1009,7 +1022,6 @@
                         return;
                     }
 
-                    // 清理输入
                     username = username.trim();
                     height = parseFloat(height);
                     weight = parseFloat(weight);
@@ -1054,12 +1066,9 @@
                         }
                     };
 
-                    console.log('注册新用户:', userData);
-
                     const saved = await this.sync.saveUserData(username, userData, token);
                     if (!saved) {
                         this.showError('保存用户数据失败，但已保存到本地');
-                        // 即使GitHub保存失败，也允许用户继续使用本地数据
                     }
 
                     localStorage.setItem('github_token', token);
@@ -1068,13 +1077,11 @@
                     this.userData = userData;
                     this.view = 'main';
                     
-                    // 保存登录状态
                     const loginState = {
                         username: this.currentUser,
                         data: this.userData
                     };
                     localStorage.setItem(APP.STORAGE_KEY, JSON.stringify(loginState));
-                    console.log('注册成功，保存状态:', loginState);
                     
                     this.render();
                 }
@@ -1089,8 +1096,12 @@
 
                 addTodayEntry(weight) {
                     const num = parseFloat(weight);
-                    if (isNaN(num) || num < 30 || num > 200) return false;
+                    if (isNaN(num) || num < 30 || num > 200) {
+                        this.showError('请输入30-200之间的有效体重');
+                        return false;
+                    }
                     this.todayEntries.push(num);
+                    this.weightInputValue = ''; // 清空输入
                     this.render();
                     return true;
                 }
@@ -1103,6 +1114,7 @@
                 async saveTodayWeight() {
                     if (this.todayEntries.length === 0) return;
 
+                    const avg = this.todayEntries.reduce((a, b) => a + b, 0) / this.todayEntries.length;
                     const today = new Date();
                     const monthKey = getMonthKey(today);
                     const dayKey = getDayKey(today);
@@ -1134,7 +1146,6 @@
                     const token = localStorage.getItem('github_token');
                     await this.sync.saveUserData(this.currentUser, this.userData, token);
 
-                    // 更新本地存储
                     const loginState = {
                         username: this.currentUser,
                         data: this.userData
@@ -1442,7 +1453,7 @@
                                 <div class="section-title">今日录入</div>
                                 
                                 <div class="input-row">
-                                    <input type="number" id="weight-input" class="weight-input" step="0.01" placeholder="输入体重" autocomplete="off">
+                                    <input type="number" id="weight-input" class="weight-input" step="0.01" placeholder="输入体重" autocomplete="off" value="${this.weightInputValue}">
                                     <button id="add-weight-btn" class="add-btn">+</button>
                                 </div>
 
@@ -1477,7 +1488,7 @@
                                         </div>
                                     </div>
                                     <div>
-                                        <button id="chart-prev" class="nav-btn">←</button>
+                                        <button id="chart-prev" class="nav-btn" ${this.chartStartIndex <= 0 ? 'disabled' : ''}>←</button>
                                         <button id="chart-next" class="nav-btn">→</button>
                                     </div>
                                 </div>
@@ -1654,23 +1665,36 @@
                         });
                     });
 
-                    const addBtn = document.getElementById('add-weight-btn');
+                    // 修复输入框问题
                     const weightInput = document.getElementById('weight-input');
+                    if (weightInput) {
+                        // 监听输入变化，但不立即重新渲染
+                        weightInput.addEventListener('input', (e) => {
+                            this.weightInputValue = e.target.value;
+                        });
 
-                    if (addBtn && weightInput) {
-                        const addWeight = () => {
-                            this.addTodayEntry(weightInput.value);
-                            weightInput.value = '';
-                        };
-
-                        addBtn.addEventListener('click', addWeight);
+                        // 防止回车触发表单提交
                         weightInput.addEventListener('keypress', (e) => {
-                            if (e.key === 'Enter') addWeight();
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                this.addTodayEntry(weightInput.value);
+                            }
+                        });
+                    }
+
+                    const addBtn = document.getElementById('add-weight-btn');
+                    if (addBtn) {
+                        addBtn.addEventListener('click', () => {
+                            const input = document.getElementById('weight-input');
+                            if (input) {
+                                this.addTodayEntry(input.value);
+                            }
                         });
                     }
 
                     document.querySelectorAll('.remove-entry').forEach(el => {
                         el.addEventListener('click', (e) => {
+                            e.stopPropagation();
                             const index = e.target.dataset.index;
                             if (index !== undefined) {
                                 this.removeTodayEntry(parseInt(index));
