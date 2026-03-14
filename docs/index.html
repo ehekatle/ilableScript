@@ -185,6 +185,7 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            position: relative;
         }
 
         .user-info {
@@ -216,18 +217,50 @@
             color: var(--text-light);
         }
 
-        .reset-btn {
+        .menu-btn {
             background: none;
             border: 1px solid var(--border);
-            padding: 8px 16px;
+            width: 44px;
+            height: 44px;
             border-radius: var(--radius-sm);
-            font-size: 14px;
-            color: var(--text-light);
+            font-size: 20px;
             cursor: pointer;
         }
 
-        .reset-btn:hover {
+        .menu-btn:hover {
             background: var(--input-bg);
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 60px;
+            right: 0;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid var(--border);
+            width: 160px;
+            z-index: 100;
+            display: none;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .menu-item {
+            padding: 14px 18px;
+            font-size: 14px;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .menu-item:hover {
+            background: var(--bg);
+        }
+
+        .menu-item.danger {
+            color: var(--danger);
         }
 
         /* 目标卡片 */
@@ -361,60 +394,23 @@
             border-radius: var(--radius-md);
             padding: 20px;
             border: 1px solid var(--border);
-        }
-
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
             margin-bottom: 16px;
         }
 
         .chart-title {
             font-size: 16px;
             font-weight: 600;
-            color: var(--text);
-        }
-
-        .chart-legend {
-            display: flex;
-            gap: 16px;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            color: var(--text-light);
-        }
-
-        .legend-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 10px;
-        }
-
-        .dot-red {
-            background: var(--danger);
-        }
-
-        .dot-green {
-            background: var(--success);
-        }
-
-        .dot-target {
-            background: var(--text-lighter);
-            opacity: 0.5;
+            margin-bottom: 16px;
         }
 
         .chart-container {
             display: flex;
             align-items: flex-end;
             justify-content: space-around;
-            height: 200px;
-            padding: 10px 0;
+            height: 220px;
+            padding: 10px 0 20px;
             gap: 4px;
+            position: relative;
         }
 
         .chart-column {
@@ -423,61 +419,49 @@
             flex-direction: column;
             align-items: center;
             gap: 4px;
-            min-width: 40px;
+            min-width: 35px;
+            height: 100%;
+            justify-content: flex-end;
         }
 
-        .chart-bars {
+        .bar-container {
+            width: 100%;
+            height: 180px;
             display: flex;
-            gap: 4px;
-            align-items: flex-end;
-            height: 140px;
-            width: 100%;
-            justify-content: center;
-        }
-
-        .bar-actual {
-            width: 24px;
-            border-radius: 4px 4px 0 0;
-            transition: height 0.3s;
-        }
-
-        .bar-actual.above {
-            background: var(--danger);
-        }
-
-        .bar-actual.below {
-            background: var(--success);
-        }
-
-        .target-line {
-            width: 100%;
-            height: 2px;
-            background: var(--text-lighter);
-            opacity: 0.5;
+            flex-direction: column-reverse;
+            align-items: center;
             position: relative;
         }
 
-        .target-line::after {
-            content: '目标';
-            position: absolute;
-            right: -30px;
-            top: -8px;
-            font-size: 10px;
-            color: var(--text-lighter);
+        .bar-green, .bar-red {
+            width: 24px;
+            transition: height 0.3s;
+        }
+
+        .bar-green {
+            background: var(--success);
+            border-radius: 4px 4px 0 0;
+        }
+
+        .bar-red {
+            background: var(--danger);
+            border-radius: 4px 4px 0 0;
         }
 
         .chart-date {
             font-size: 11px;
             color: var(--text-light);
-            margin-top: 4px;
+            margin-top: 8px;
         }
 
         .chart-weight {
             font-size: 10px;
             color: var(--text-lighter);
+            position: absolute;
+            bottom: -20px;
         }
 
-        /* 重置确认模态框 */
+        /* 模态框 */
         .modal {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -537,6 +521,10 @@
             background: var(--danger);
             color: white;
         }
+
+        .file-input {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -562,6 +550,11 @@
                     const d = date || new Date();
                     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
                 },
+                monthKey: date => {
+                    const d = date || new Date();
+                    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                },
+                dayKey: date => String((date || new Date()).getDate()).padStart(2,'0'),
                 getLastNDays: (n = 7) => {
                     const dates = [];
                     const today = new Date();
@@ -602,13 +595,14 @@
             class WeightApp {
                 constructor() {
                     this.state = {
-                        view: 'setup', // 'setup' or 'main'
+                        view: 'setup',
                         userData: null,
                         bmiValue: WEIGHT_CONFIG.BMI_DEFAULT,
                         errorMsg: null,
                         weightInput: '',
                         isSaving: false,
-                        showResetConfirm: false
+                        showMenu: false,
+                        showModal: null
                     };
                     this.loadFromStorage();
                     this.render();
@@ -634,10 +628,10 @@
                     const daysDiff = Math.floor((today - lastEntry) / 86400000);
 
                     if (daysDiff >= 4) {
-                        // 超过4天未记录，重置
-                        this.resetData();
+                        this.clearData();
                         this.state.view = 'setup';
-                        this.state.showResetConfirm = { 
+                        this.state.showModal = { 
+                            type: 'fail', 
                             title: '减肥失败', 
                             message: '连续4天未记录，请重新开始' 
                         };
@@ -645,7 +639,6 @@
                     }
 
                     if (daysDiff >= 3) {
-                        // 3天未记录，自动填充
                         this.fillMissingDays(lastEntry, today);
                     }
                 }
@@ -666,16 +659,22 @@
                 }
 
                 getTargetForDate(date) {
-                    const monthKey = DateUtils.format(date).slice(0, 7);
-                    const dayKey = String(date.getDate()).padStart(2, '0');
+                    const monthKey = DateUtils.monthKey(date);
+                    const dayKey = DateUtils.dayKey(date);
                     return this.state.userData?.progress?.[monthKey]?.[dayKey]?.[0] || null;
                 }
 
                 getActualForDate(date) {
-                    const monthKey = DateUtils.format(date).slice(0, 7);
-                    const dayKey = String(date.getDate()).padStart(2, '0');
+                    const monthKey = DateUtils.monthKey(date);
+                    const dayKey = DateUtils.dayKey(date);
                     const dayData = this.state.userData?.progress?.[monthKey]?.[dayKey];
                     return dayData?.length > 1 ? MathUtils.avg(dayData.slice(1)) : null;
+                }
+
+                getAllActualForDate(date) {
+                    const monthKey = DateUtils.monthKey(date);
+                    const dayKey = DateUtils.dayKey(date);
+                    return this.state.userData?.progress?.[monthKey]?.[dayKey]?.slice(1) || [];
                 }
 
                 fillMissingDays(startDate, endDate) {
@@ -689,11 +688,9 @@
 
                     if (!days.length) return;
 
-                    // 获取开始日期的实际体重和目标
                     const startActual = this.getActualForDate(startDate) || this.state.userData.weight;
                     const startTarget = this.getTargetForDate(startDate) || this.state.userData.weight;
                     
-                    // 获取第一个有效录入（今天或之后）
                     let firstActual = null;
                     for (let d = new Date(endDate); d >= startDate; d.setDate(d.getDate() - 1)) {
                         const actual = this.getActualForDate(d);
@@ -705,16 +702,13 @@
 
                     if (firstActual === null) return;
 
-                    // 计算每日目标
                     let target = startTarget;
                     const targets = days.map(() => target = MathUtils.nextTarget(target));
-
-                    // 计算等差实际体重
                     const step = (firstActual - startActual) / (days.length + 1);
 
                     days.forEach((date, i) => {
-                        const monthKey = DateUtils.format(date).slice(0, 7);
-                        const dayKey = String(date.getDate()).padStart(2, '0');
+                        const monthKey = DateUtils.monthKey(date);
+                        const dayKey = DateUtils.dayKey(date);
                         
                         if (!this.state.userData.progress[monthKey]) {
                             this.state.userData.progress[monthKey] = {};
@@ -751,8 +745,9 @@
                     }
 
                     const goal = MathUtils.weightFromBMI(this.state.bmiValue, height);
-                    const today = DateUtils.format(new Date()).slice(0, 7);
-                    const dayKey = String(new Date().getDate()).padStart(2, '0');
+                    const today = new Date();
+                    const monthKey = DateUtils.monthKey(today);
+                    const dayKey = DateUtils.dayKey(today);
 
                     const userData = {
                         name,
@@ -760,7 +755,7 @@
                         weight,
                         goal,
                         progress: {
-                            [today]: {
+                            [monthKey]: {
                                 [dayKey]: [weight]
                             }
                         }
@@ -772,20 +767,25 @@
                     this.render();
                 }
 
-                handleReset() {
-                    this.state.showResetConfirm = {
-                        title: '重新设置',
-                        message: '确定要重新设置个人信息吗？当前数据将被清除。'
+                clearData() {
+                    StorageUtils.clear();
+                    this.state.userData = null;
+                }
+
+                handleLogout() {
+                    this.state.showModal = {
+                        type: 'clear',
+                        title: '清除数据',
+                        message: '确定要清除所有数据吗？此操作不可恢复。'
                     };
                     this.render();
                 }
 
-                confirmReset() {
-                    StorageUtils.clear();
-                    this.state.userData = null;
+                confirmClear() {
+                    this.clearData();
                     this.state.view = 'setup';
-                    this.state.showResetConfirm = null;
-                    this.state.bmiValue = WEIGHT_CONFIG.BMI_DEFAULT;
+                    this.state.showModal = null;
+                    this.state.showMenu = false;
                     this.render();
                 }
 
@@ -804,12 +804,11 @@
                     this.render();
 
                     const today = new Date();
-                    const monthKey = DateUtils.format(today).slice(0, 7);
-                    const dayKey = String(today.getDate()).padStart(2, '0');
+                    const monthKey = DateUtils.monthKey(today);
+                    const dayKey = DateUtils.dayKey(today);
 
                     const existing = this.state.userData.progress?.[monthKey]?.[dayKey] || [];
 
-                    // 计算今日目标
                     let target = existing[0];
                     if (!target) {
                         const yesterday = new Date(today);
@@ -818,7 +817,6 @@
                         target = yesterdayTarget ? MathUtils.nextTarget(yesterdayTarget) : this.state.userData.weight;
                     }
 
-                    // 保存数据
                     if (!this.state.userData.progress[monthKey]) {
                         this.state.userData.progress[monthKey] = {};
                     }
@@ -846,9 +844,70 @@
                             display: DateUtils.display(date),
                             target,
                             actual,
+                            actuals: this.getAllActualForDate(date),
                             weight: actual !== null ? actual.toFixed(2) : '--'
                         };
                     });
+                }
+
+                calculateYAxisRange() {
+                    const chartData = this.getChartData();
+                    const actuals = chartData.map(d => d.actual).filter(a => a !== null);
+                    
+                    if (actuals.length === 0) {
+                        return { min: 60, max: 100 };
+                    }
+
+                    const avg = actuals.reduce((a, b) => a + b, 0) / actuals.length;
+                    
+                    let maxDiff = 0;
+                    actuals.forEach(actual => {
+                        const diff = Math.abs(actual - avg);
+                        if (diff > maxDiff) maxDiff = diff;
+                    });
+
+                    const padding = maxDiff + 0.5;
+                    return {
+                        min: Math.max(30, Math.floor((avg - padding) * 10) / 10),
+                        max: Math.min(200, Math.ceil((avg + padding) * 10) / 10)
+                    };
+                }
+
+                exportData() {
+                    const dataStr = JSON.stringify(this.state.userData, null, 2);
+                    const blob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${this.state.userData.name}_weight_data.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    this.state.showModal = null;
+                    this.state.showMenu = false;
+                    this.render();
+                }
+
+                importData(file) {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            if (!data.name || !data.height || !data.weight || !data.goal || !data.progress) {
+                                alert('无效的数据格式');
+                                return;
+                            }
+                            
+                            this.state.userData = data;
+                            StorageUtils.save(data);
+                            this.state.view = 'main';
+                            this.state.showModal = null;
+                            this.state.showMenu = false;
+                            this.render();
+                        } catch (err) {
+                            alert('导入失败：' + err.message);
+                        }
+                    };
+                    reader.readAsText(file);
                 }
 
                 showError(msg) {
@@ -863,7 +922,7 @@
                 render() {
                     document.getElementById('app').innerHTML = this.state.view === 'setup' ? this.renderSetup() : this.renderMain();
                     this.attachEvents();
-                    if (this.state.showResetConfirm) this.renderConfirmModal();
+                    if (this.state.showModal) this.renderModal();
                 }
 
                 renderSetup() {
@@ -907,12 +966,11 @@
                     const today = new Date();
                     const target = this.getTargetForDate(today) || this.state.userData.weight;
                     
-                    const monthKey = DateUtils.format(today).slice(0, 7);
-                    const dayKey = String(today.getDate()).padStart(2, '0');
+                    const monthKey = DateUtils.monthKey(today);
+                    const dayKey = DateUtils.dayKey(today);
                     const todayEntries = this.state.userData.progress?.[monthKey]?.[dayKey] || [];
                     const entryCount = todayEntries.length > 0 ? todayEntries.length - 1 : 0;
 
-                    // 计算当前体重（最近一次实际体重）
                     let currentWeight = this.state.userData.weight;
                     const months = Object.keys(this.state.userData.progress || {}).sort().reverse();
                     outer: for (const month of months) {
@@ -930,10 +988,8 @@
                                     (this.state.userData.weight - this.state.userData.goal) * 100).toFixed(1);
 
                     const chartData = this.getChartData();
-                    const maxWeight = Math.max(
-                        ...chartData.map(d => d.target || 0),
-                        ...chartData.map(d => d.actual || 0)
-                    ) * 1.1; // 留10%空间
+                    const yRange = this.calculateYAxisRange();
+                    const range = yRange.max - yRange.min;
 
                     return `
                         <div>
@@ -945,7 +1001,12 @@
                                         <div class="user-stats">${this.state.userData.height}cm · 目标 ${this.state.userData.goal.toFixed(2)}kg</div>
                                     </div>
                                 </div>
-                                <button class="reset-btn" id="reset-btn">重新设置</button>
+                                <button class="menu-btn" id="menu-btn">⋯</button>
+                                <div class="dropdown-menu ${this.state.showMenu ? 'show' : ''}" id="dropdown-menu">
+                                    <div class="menu-item" data-action="clear">清除数据</div>
+                                    <div class="menu-item" data-action="export">导出数据</div>
+                                    <div class="menu-item" data-action="import">导入数据</div>
+                                </div>
                             </div>
 
                             <div class="target-card">
@@ -978,36 +1039,30 @@
                             </div>
 
                             <div class="chart-section">
-                                <div class="chart-header">
-                                    <span class="chart-title">最近7天体重</span>
-                                    <div class="chart-legend">
-                                        <div class="legend-item">
-                                            <span class="legend-dot dot-green"></span>
-                                            <span>低于目标</span>
-                                        </div>
-                                        <div class="legend-item">
-                                            <span class="legend-dot dot-red"></span>
-                                            <span>高于目标</span>
-                                        </div>
-                                    </div>
-                                </div>
+                                <div class="chart-title">最近7天体重</div>
                                 <div class="chart-container">
                                     ${chartData.map(item => {
-                                        const targetHeight = item.target ? (item.target / maxWeight) * 140 : 0;
-                                        const actualHeight = item.actual ? (item.actual / maxWeight) * 140 : 0;
-                                        const barClass = item.actual !== null ? 
-                                            (item.actual <= item.target ? 'below' : 'above') : '';
+                                        const target = item.target || 0;
+                                        const actual = item.actual;
+                                        const greenHeight = actual !== null ? 
+                                            Math.min(actual, target) : 0;
+                                        const redHeight = actual !== null && actual > target ? 
+                                            actual - target : 0;
+                                        
+                                        const totalHeight = actual !== null ? actual : 0;
+                                        const greenPercent = ((greenHeight - yRange.min) / range) * 180;
+                                        const redPercent = (redHeight / range) * 180;
                                         
                                         return `
                                             <div class="chart-column">
-                                                <div class="chart-bars">
-                                                    ${item.actual !== null ? 
-                                                        `<div class="bar-actual ${barClass}" 
-                                                              style="height: ${actualHeight}px;"
-                                                              title="${item.actual.toFixed(2)}kg"></div>` : ''}
+                                                <div class="bar-container">
+                                                    ${actual !== null ? `
+                                                        ${redHeight > 0 ? 
+                                                            `<div class="bar-red" style="height: ${Math.max(0, redPercent)}px;"></div>` : ''}
+                                                        ${greenHeight > 0 ? 
+                                                            `<div class="bar-green" style="height: ${Math.max(0, greenPercent)}px;"></div>` : ''}
+                                                    ` : ''}
                                                 </div>
-                                                ${item.target !== null ? 
-                                                    `<div class="target-line" style="height: 2px; margin-top: ${targetHeight}px;"></div>` : ''}
                                                 <div class="chart-date">${item.display}</div>
                                                 <div class="chart-weight">${item.weight}</div>
                                             </div>
@@ -1019,30 +1074,48 @@
                     `;
                 }
 
-                renderConfirmModal() {
+                renderModal() {
                     const modal = document.createElement('div');
                     modal.className = 'modal';
-                    modal.innerHTML = `
-                        <div class="modal-content">
-                            <div class="modal-title">${this.state.showResetConfirm.title}</div>
-                            <div class="modal-text">${this.state.showResetConfirm.message}</div>
-                            <div class="modal-btns">
-                                <button class="modal-btn secondary" id="modal-cancel">取消</button>
-                                <button class="modal-btn danger" id="modal-confirm">确定</button>
+                    
+                    let content = '';
+                    if (this.state.showModal.type === 'clear') {
+                        content = `
+                            <div class="modal-content">
+                                <div class="modal-title">${this.state.showModal.title}</div>
+                                <div class="modal-text">${this.state.showModal.message}</div>
+                                <div class="modal-btns">
+                                    <button class="modal-btn secondary" id="modal-cancel">取消</button>
+                                    <button class="modal-btn danger" id="modal-confirm">清除</button>
+                                </div>
                             </div>
-                        </div>
-                    `;
+                        `;
+                    } else if (this.state.showModal.type === 'import') {
+                        content = `
+                            <div class="modal-content">
+                                <div class="modal-title">导入数据</div>
+                                <div class="modal-text">选择JSON文件导入</div>
+                                <input type="file" id="import-file" class="file-input" accept=".json">
+                                <div class="modal-btns">
+                                    <button class="modal-btn secondary" id="modal-cancel">取消</button>
+                                    <button class="modal-btn primary" id="modal-confirm-import">选择文件</button>
+                                </div>
+                            </div>
+                        `;
+                    } else if (this.state.showModal.type === 'fail') {
+                        content = `
+                            <div class="modal-content">
+                                <div class="modal-title">${this.state.showModal.title}</div>
+                                <div class="modal-text">${this.state.showModal.message}</div>
+                                <div class="modal-btns">
+                                    <button class="modal-btn primary" id="modal-ok">确定</button>
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    modal.innerHTML = content;
                     document.body.appendChild(modal);
-
-                    document.getElementById('modal-cancel')?.addEventListener('click', () => {
-                        document.body.removeChild(modal);
-                        this.state.showResetConfirm = null;
-                    });
-
-                    document.getElementById('modal-confirm')?.addEventListener('click', () => {
-                        this.confirmReset();
-                        document.body.removeChild(modal);
-                    });
                 }
 
                 attachEvents() {
@@ -1068,8 +1141,32 @@
                             );
                         });
                     } else {
-                        document.getElementById('reset-btn')?.addEventListener('click', () => {
-                            this.handleReset();
+                        document.getElementById('menu-btn')?.addEventListener('click', e => {
+                            e.stopPropagation();
+                            this.state.showMenu = !this.state.showMenu;
+                            this.render();
+                        });
+
+                        document.addEventListener('click', () => {
+                            if (this.state.showMenu) {
+                                this.state.showMenu = false;
+                                this.render();
+                            }
+                        });
+
+                        document.querySelectorAll('[data-action]').forEach(el => {
+                            el.addEventListener('click', e => {
+                                const action = e.target.dataset.action;
+                                this.state.showMenu = false;
+                                if (action === 'clear') {
+                                    this.handleLogout();
+                                } else if (action === 'export') {
+                                    this.exportData();
+                                } else if (action === 'import') {
+                                    this.state.showModal = { type: 'import' };
+                                    this.render();
+                                }
+                            });
                         });
 
                         const input = document.getElementById('weight-input');
@@ -1083,6 +1180,32 @@
                             });
                             input.focus();
                         }
+
+                        document.getElementById('modal-cancel')?.addEventListener('click', () => {
+                            document.body.removeChild(document.querySelector('.modal'));
+                            this.state.showModal = null;
+                        });
+
+                        document.getElementById('modal-confirm')?.addEventListener('click', () => {
+                            this.confirmClear();
+                            document.body.removeChild(document.querySelector('.modal'));
+                        });
+
+                        document.getElementById('modal-confirm-import')?.addEventListener('click', () => {
+                            document.getElementById('import-file').click();
+                        });
+
+                        document.getElementById('import-file')?.addEventListener('change', e => {
+                            if (e.target.files.length) {
+                                this.importData(e.target.files[0]);
+                                document.body.removeChild(document.querySelector('.modal'));
+                            }
+                        });
+
+                        document.getElementById('modal-ok')?.addEventListener('click', () => {
+                            document.body.removeChild(document.querySelector('.modal'));
+                            this.state.showModal = null;
+                        });
                     }
                 }
             }
