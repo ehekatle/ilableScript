@@ -45,15 +45,6 @@
             width: 100%;
         }
 
-        .card {
-            background: var(--card-bg);
-            border-radius: var(--radius-lg);
-            padding: 24px 20px;
-            box-shadow: var(--shadow);
-            margin-bottom: 16px;
-            border: 1px solid var(--border);
-        }
-
         /* 设置页 */
         .setup-container {
             min-height: 80vh;
@@ -108,11 +99,28 @@
             opacity: 0.9;
         }
 
+        .setup-btn.secondary {
+            background: var(--primary);
+        }
+
         .setup-error {
             color: var(--danger);
             font-size: 14px;
             margin-top: 12px;
             text-align: center;
+        }
+
+        .import-section {
+            margin: 20px 0;
+            text-align: center;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+
+        .import-text {
+            color: var(--text-light);
+            font-size: 14px;
+            margin-bottom: 10px;
         }
 
         /* BMI滑块 */
@@ -609,11 +617,15 @@
                 }
 
                 loadFromStorage() {
-                    const data = StorageUtils.load();
-                    if (data) {
-                        this.state.userData = data;
-                        this.state.view = 'main';
-                        this.checkAndFillMissingData();
+                    try {
+                        const data = StorageUtils.load();
+                        if (data && data.name && data.height && data.weight && data.goal && data.progress) {
+                            this.state.userData = data;
+                            this.state.view = 'main';
+                            this.checkAndFillMissingData();
+                        }
+                    } catch (e) {
+                        console.log('加载数据失败', e);
                     }
                 }
 
@@ -772,7 +784,7 @@
                     this.state.userData = null;
                 }
 
-                handleLogout() {
+                handleClearData() {
                     this.state.showModal = {
                         type: 'clear',
                         title: '清除数据',
@@ -874,6 +886,8 @@
                 }
 
                 exportData() {
+                    if (!this.state.userData) return;
+                    
                     const dataStr = JSON.stringify(this.state.userData, null, 2);
                     const blob = new Blob([dataStr], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
@@ -882,18 +896,29 @@
                     a.download = `${this.state.userData.name}_weight_data.json`;
                     a.click();
                     URL.revokeObjectURL(url);
-                    this.state.showModal = null;
                     this.state.showMenu = false;
                     this.render();
                 }
 
                 importData(file) {
                     const reader = new FileReader();
-                    reader.onload = e => {
+                    reader.onload = (e) => {
                         try {
                             const data = JSON.parse(e.target.result);
+                            
+                            // 验证数据完整性
                             if (!data.name || !data.height || !data.weight || !data.goal || !data.progress) {
-                                alert('无效的数据格式');
+                                alert('无效的数据格式：缺少必要字段');
+                                return;
+                            }
+                            
+                            // 验证数据类型
+                            if (typeof data.name !== 'string' || 
+                                typeof data.height !== 'number' || 
+                                typeof data.weight !== 'number' || 
+                                typeof data.goal !== 'number' || 
+                                typeof data.progress !== 'object') {
+                                alert('无效的数据格式：字段类型错误');
                                 return;
                             }
                             
@@ -901,7 +926,6 @@
                             StorageUtils.save(data);
                             this.state.view = 'main';
                             this.state.showModal = null;
-                            this.state.showMenu = false;
                             this.render();
                         } catch (err) {
                             alert('导入失败：' + err.message);
@@ -920,7 +944,7 @@
                 }
 
                 render() {
-                    // 方案A：在渲染前检查数据
+                    // 安全检查：如果视图是main但没有用户数据，切回setup
                     if (this.state.view === 'main' && !this.state.userData) {
                         this.state.view = 'setup';
                     }
@@ -960,6 +984,12 @@
                                     <div class="value" id="target-weight-display">${goal.toFixed(2)} kg</div>
                                 </div>
 
+                                <div class="import-section">
+                                    <div class="import-text">或者导入已有数据</div>
+                                    <button id="setup-import-btn" class="setup-btn secondary">选择文件导入</button>
+                                    <input type="file" id="setup-import-file" class="file-input" accept=".json">
+                                </div>
+
                                 <button id="setup-btn" class="setup-btn">开始记录</button>
                             </div>
                             ${this.state.errorMsg ? `<div class="setup-error">${this.state.errorMsg}</div>` : ''}
@@ -968,8 +998,14 @@
                 }
 
                 renderMain() {
-                    // 方案A：在渲染Main前确保有数据
+                    // 多重安全保护
                     if (!this.state.userData) {
+                        this.state.view = 'setup';
+                        return this.renderSetup();
+                    }
+
+                    if (!this.state.userData.name || !this.state.userData.progress) {
+                        this.state.view = 'setup';
                         return this.renderSetup();
                     }
 
@@ -1015,7 +1051,6 @@
                                 <div class="dropdown-menu ${this.state.showMenu ? 'show' : ''}" id="dropdown-menu">
                                     <div class="menu-item" data-action="clear">清除数据</div>
                                     <div class="menu-item" data-action="export">导出数据</div>
-                                    <div class="menu-item" data-action="import">导入数据</div>
                                 </div>
                             </div>
 
@@ -1099,18 +1134,6 @@
                                 </div>
                             </div>
                         `;
-                    } else if (this.state.showModal.type === 'import') {
-                        content = `
-                            <div class="modal-content">
-                                <div class="modal-title">导入数据</div>
-                                <div class="modal-text">选择JSON文件导入</div>
-                                <input type="file" id="import-file" class="file-input" accept=".json">
-                                <div class="modal-btns">
-                                    <button class="modal-btn secondary" id="modal-cancel">取消</button>
-                                    <button class="modal-btn primary" id="modal-confirm-import">选择文件</button>
-                                </div>
-                            </div>
-                        `;
                     } else if (this.state.showModal.type === 'fail') {
                         content = `
                             <div class="modal-content">
@@ -1149,13 +1172,38 @@
                                 document.getElementById('setup-weight')?.value
                             );
                         });
-                    } else {
-                        document.getElementById('menu-btn')?.addEventListener('click', e => {
-                            e.stopPropagation();
-                            this.state.showMenu = !this.state.showMenu;
-                            this.render();
-                        });
 
+                        // 导入相关事件
+                        const importBtn = document.getElementById('setup-import-btn');
+                        const importFile = document.getElementById('setup-import-file');
+                        
+                        if (importBtn) {
+                            importBtn.addEventListener('click', () => {
+                                importFile.click();
+                            });
+                        }
+                        
+                        if (importFile) {
+                            importFile.addEventListener('change', (e) => {
+                                if (e.target.files.length) {
+                                    this.importData(e.target.files[0]);
+                                }
+                                // 清除文件选择，允许重新选择同一个文件
+                                e.target.value = '';
+                            });
+                        }
+                    } else {
+                        // 主界面事件
+                        const menuBtn = document.getElementById('menu-btn');
+                        if (menuBtn) {
+                            menuBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                this.state.showMenu = !this.state.showMenu;
+                                this.render();
+                            });
+                        }
+
+                        // 点击其他地方关闭菜单
                         document.addEventListener('click', () => {
                             if (this.state.showMenu) {
                                 this.state.showMenu = false;
@@ -1163,25 +1211,25 @@
                             }
                         });
 
+                        // 菜单项事件
                         document.querySelectorAll('[data-action]').forEach(el => {
-                            el.addEventListener('click', e => {
+                            el.addEventListener('click', (e) => {
                                 const action = e.target.dataset.action;
                                 this.state.showMenu = false;
                                 if (action === 'clear') {
-                                    this.handleLogout();
+                                    this.handleClearData();
                                 } else if (action === 'export') {
                                     this.exportData();
-                                } else if (action === 'import') {
-                                    this.state.showModal = { type: 'import' };
-                                    this.render();
                                 }
+                                this.render();
                             });
                         });
 
+                        // 体重输入框事件
                         const input = document.getElementById('weight-input');
                         if (input) {
                             input.addEventListener('input', e => this.state.weightInput = e.target.value);
-                            input.addEventListener('keypress', async e => {
+                            input.addEventListener('keypress', async (e) => {
                                 if (e.key === 'Enter' && !this.state.isSaving) {
                                     e.preventDefault();
                                     await this.saveTodayWeight(input.value);
@@ -1190,31 +1238,31 @@
                             input.focus();
                         }
 
-                        document.getElementById('modal-cancel')?.addEventListener('click', () => {
-                            document.body.removeChild(document.querySelector('.modal'));
-                            this.state.showModal = null;
-                        });
-
-                        document.getElementById('modal-confirm')?.addEventListener('click', () => {
-                            this.confirmClear();
-                            document.body.removeChild(document.querySelector('.modal'));
-                        });
-
-                        document.getElementById('modal-confirm-import')?.addEventListener('click', () => {
-                            document.getElementById('import-file').click();
-                        });
-
-                        document.getElementById('import-file')?.addEventListener('change', e => {
-                            if (e.target.files.length) {
-                                this.importData(e.target.files[0]);
+                        // 模态框事件
+                        const modalCancel = document.getElementById('modal-cancel');
+                        if (modalCancel) {
+                            modalCancel.addEventListener('click', () => {
                                 document.body.removeChild(document.querySelector('.modal'));
-                            }
-                        });
+                                this.state.showModal = null;
+                            });
+                        }
 
-                        document.getElementById('modal-ok')?.addEventListener('click', () => {
-                            document.body.removeChild(document.querySelector('.modal'));
-                            this.state.showModal = null;
-                        });
+                        const modalConfirm = document.getElementById('modal-confirm');
+                        if (modalConfirm) {
+                            modalConfirm.addEventListener('click', () => {
+                                this.confirmClear();
+                                const modal = document.querySelector('.modal');
+                                if (modal) document.body.removeChild(modal);
+                            });
+                        }
+
+                        const modalOk = document.getElementById('modal-ok');
+                        if (modalOk) {
+                            modalOk.addEventListener('click', () => {
+                                document.body.removeChild(document.querySelector('.modal'));
+                                this.state.showModal = null;
+                            });
+                        }
                     }
                 }
             }
