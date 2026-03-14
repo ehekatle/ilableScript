@@ -436,7 +436,7 @@
             width: 100%;
             height: 180px;
             display: flex;
-            flex-direction: column-reverse;
+            flex-direction: column;
             align-items: center;
             position: relative;
         }
@@ -847,19 +847,66 @@
                 }
 
                 getChartData() {
-                    const dates = DateUtils.getLastNDays(7);
-                    return dates.map(date => {
-                        const target = this.getTargetForDate(date);
-                        const actual = this.getActualForDate(date);
-                        return {
-                            date,
-                            display: DateUtils.display(date),
-                            target,
-                            actual,
-                            actuals: this.getAllActualForDate(date),
-                            weight: actual !== null ? actual.toFixed(2) : '--'
-                        };
-                    });
+                    // 获取所有有数据的日期
+                    const allDates = [];
+                    const progress = this.state.userData?.progress;
+                    
+                    if (progress) {
+                        Object.keys(progress).forEach(monthKey => {
+                            const days = Object.keys(progress[monthKey]);
+                            days.forEach(day => {
+                                const [year, month] = monthKey.split('-').map(Number);
+                                const date = new Date(year, month - 1, parseInt(day));
+                                allDates.push(date);
+                            });
+                        });
+                    }
+                    
+                    // 按日期排序
+                    allDates.sort((a, b) => a - b);
+                    
+                    // 取最近7天（从6天前到今天）
+                    const today = new Date();
+                    const sevenDaysAgo = new Date(today);
+                    sevenDaysAgo.setDate(today.getDate() - 6);
+                    
+                    // 生成最近7天的完整列表（包括无数据的日期）
+                    const result = [];
+                    for (let i = 0; i < 7; i++) {
+                        const date = new Date(sevenDaysAgo);
+                        date.setDate(sevenDaysAgo.getDate() + i);
+                        
+                        // 查找这一天是否有数据
+                        const hasData = allDates.some(d => 
+                            d.getDate() === date.getDate() && 
+                            d.getMonth() === date.getMonth() && 
+                            d.getFullYear() === date.getFullYear()
+                        );
+                        
+                        if (hasData) {
+                            const target = this.getTargetForDate(date);
+                            const actual = this.getActualForDate(date);
+                            result.push({
+                                date,
+                                display: DateUtils.display(date),
+                                target,
+                                actual,
+                                weight: actual !== null ? actual.toFixed(2) : '--',
+                                hasData: true
+                            });
+                        } else {
+                            result.push({
+                                date,
+                                display: DateUtils.display(date),
+                                target: null,
+                                actual: null,
+                                weight: '--',
+                                hasData: false
+                            });
+                        }
+                    }
+                    
+                    return result;
                 }
 
                 calculateYAxisRange() {
@@ -1087,25 +1134,36 @@
                                 <div class="chart-title">最近7天体重</div>
                                 <div class="chart-container">
                                     ${chartData.map(item => {
+                                        if (!item.hasData) {
+                                            return `
+                                                <div class="chart-column">
+                                                    <div class="bar-container">
+                                                        <!-- 无数据 -->
+                                                    </div>
+                                                    <div class="chart-date">${item.display}</div>
+                                                    <div class="chart-weight">--</div>
+                                                </div>
+                                            `;
+                                        }
+                                        
                                         const target = item.target || 0;
                                         const actual = item.actual;
-                                        const greenHeight = actual !== null ? 
-                                            Math.min(actual, target) : 0;
-                                        const redHeight = actual !== null && actual > target ? 
-                                            actual - target : 0;
                                         
+                                        // 计算各部分高度
+                                        const greenHeight = Math.min(actual, target);
+                                        const redHeight = actual > target ? actual - target : 0;
+                                        
+                                        // 转换为像素高度
                                         const greenPercent = ((greenHeight - yRange.min) / range) * 180;
                                         const redPercent = (redHeight / range) * 180;
                                         
                                         return `
                                             <div class="chart-column">
                                                 <div class="bar-container">
-                                                    ${actual !== null ? `
-                                                        ${redHeight > 0 ? 
-                                                            `<div class="bar-red" style="height: ${Math.max(0, redPercent)}px;"></div>` : ''}
-                                                        ${greenHeight > 0 ? 
-                                                            `<div class="bar-green" style="height: ${Math.max(0, greenPercent)}px;"></div>` : ''}
-                                                    ` : ''}
+                                                    ${greenHeight > 0 ? 
+                                                        `<div class="bar-green" style="height: ${Math.max(0, greenPercent)}px;"></div>` : ''}
+                                                    ${redHeight > 0 ? 
+                                                        `<div class="bar-red" style="height: ${Math.max(0, redPercent)}px;"></div>` : ''}
                                                 </div>
                                                 <div class="chart-date">${item.display}</div>
                                                 <div class="chart-weight">${item.weight}</div>
